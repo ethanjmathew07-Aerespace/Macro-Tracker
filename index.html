@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#11161b">
+    <title>Macro Tracker</title>
+    <link rel="stylesheet" href="./assets/css/app.css">
+</head>
+<body>
+    <div class="phone-app">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow" id="headerDateLabel">Today</p>
+                <h1 class="app-title">Dashboard</h1>
+            </div>
+            <button class="icon-button" id="exportStateButton" type="button" title="Export backup">↗</button>
+        </header>
+
+        <main class="app-main">
+            <section class="screen screen--active" data-screen="dashboard">
+                <section class="hero-card hero-card--dashboard">
+                    <div class="hero-card__header">
+                        <div>
+                            <p class="eyebrow">Daily calories</p>
+                            <h2 class="section-title">Energy balance</h2>
+                        </div>
+                        <label class="mini-date">
+                            <span>Date</span>
+                            <input type="date" id="selectedDate">
+                        </label>
+                    </div>
+
+                    <div class="rings-panel">
+                        <div class="triple-ring" id="calorieRing">
+                            <div class="triple-ring__center">
+                                <strong id="caloriesConsumedValue">0</strong>
+                                <span id="caloriesGoalValue">of 0 kcal</span>
+                            </div>
+                        </div>
+                        <div class="ring-metrics">
+                            <div class="stat-chip stat-chip--mint">
+                                <span>Deficit</span>
+                                <strong id="dailyDeficitValue">0 kcal</strong>
+                            </div>
+                            <div class="stat-chip stat-chip--blue">
+                                <span>Burned</span>
+                                <strong id="dailyBurnValue">0 kcal</strong>
+                            </div>
+                            <div class="stat-chip stat-chip--coral">
+                                <span>Remaining</span>
+                                <strong id="remainingCaloriesValue">0 kcal</strong>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="metrics-grid">
+                    <article class="metric-card metric-card--coral">
+                        <div class="metric-card__head">
+                            <span>Protein</span>
+                            <strong id="proteinValue">0 g</strong>
+                        </div>
+                        <p class="metric-card__goal" id="proteinGoalValue">Goal: 0 g</p>
+                        <div class="mini-track"><span id="proteinTrack"></span></div>
+                    </article>
+                    <article class="metric-card metric-card--yellow">
+                        <div class="metric-card__head">
+                            <span>Fat</span>
+                            <strong id="fatValue">0 g</strong>
+                        </div>
+                        <p class="metric-card__goal" id="fatGoalValue">Goal: 0 g</p>
+                        <div class="mini-track"><span id="fatTrack"></span></div>
+                    </article>
+                    <article class="metric-card metric-card--blue">
+                        <div class="metric-card__head">
+                            <span>Carbs</span>
+                            <strong id="carbsValue">0 g</strong>
+                        </div>
+                        <p class="metric-card__goal" id="carbsGoalValue">Goal: 0 g</p>
+                        <div class="mini-track"><span id="carbsTrack"></span></div>
+                    </article>
+                </section>
+
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Weekly deficit</p>
+                            <h2 class="section-title">7 day archive</h2>
+                        </div>
+                        <strong class="panel-total" id="weeklyDeficitTotal">0 kcal</strong>
+                    </div>
+                    <div class="weekly-chart" id="weeklyChart"></div>
+                    <div class="weekly-summary">
+                        <div>
+                            <span>Nutrition</span>
+                            <strong id="weeklyNutritionValue">0</strong>
+                        </div>
+                        <div>
+                            <span>Expenditure</span>
+                            <strong id="weeklyBurnedTotal">0</strong>
+                        </div>
+                        <div>
+                            <span>Difference</span>
+                            <strong id="weeklyDifferenceValue">0</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Food log</p>
+                            <h2 class="section-title" id="foodLogHeading">0 food logs</h2>
+                        </div>
+                    </div>
+                    <div class="food-list" id="foodLogList"></div>
+                </section>
+            </section>
+
+            <section class="screen" data-screen="library">
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">My foods</p>
+                            <h2 class="section-title">Archived grocery items</h2>
+                        </div>
+                    </div>
+                    <div class="food-list" id="libraryItemsList"></div>
+                </section>
+
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Saved meals</p>
+                            <h2 class="section-title">Reusable meal templates</h2>
+                        </div>
+                    </div>
+                    <div class="food-list" id="savedMealsList"></div>
+                </section>
+            </section>
+
+            <section class="screen" data-screen="assistant">
+                <section class="panel-card">
+                    <div class="assistant-tabs">
+                        <button class="tab-button is-active" type="button" data-assistant-tab="describe">Describe</button>
+                        <button class="tab-button" type="button" data-assistant-tab="scan">Scan Label</button>
+                        <button class="tab-button" type="button" data-assistant-tab="manual">Quick Add</button>
+                    </div>
+
+                    <div class="assistant-pane assistant-pane--active" data-assistant-pane="describe">
+                        <p class="eyebrow">Describe your food</p>
+                        <textarea id="describeInput" placeholder="Ex: 2 pieces of rye toast with peanut butter, scrambled eggs, and orange juice"></textarea>
+                        <div class="inline-row">
+                            <label>
+                                <span>Known calories</span>
+                                <input type="number" id="knownCaloriesInput" min="0" step="0.1" placeholder="Optional">
+                            </label>
+                            <button class="action-button" type="button" id="estimateFoodButton">Estimate</button>
+                        </div>
+                        <p class="helper-copy">Tip: on iPhone you can use voice dictation to describe your meal quickly.</p>
+                    </div>
+
+                    <div class="assistant-pane" data-assistant-pane="scan">
+                        <p class="eyebrow">Scan a nutrition label</p>
+                        <div class="capture-card">
+                            <div class="button-stack">
+                                <button class="action-button" type="button" id="takePhotoButton">Take photo</button>
+                                <button class="ghost-button" type="button" id="choosePhotoButton">Choose from photos</button>
+                            </div>
+                            <input type="file" id="cameraCaptureInput" accept="image/*" capture="environment" hidden>
+                            <input type="file" id="photoPickerInput" accept="image/*" hidden>
+                            <p class="helper-copy" id="selectedPhotoLabel">No image selected yet.</p>
+                            <label>
+                                <span>Item name (optional)</span>
+                                <input type="text" id="scanNameInput" placeholder="Fairlife Protein Shake">
+                            </label>
+                            <label>
+                                <span>Brand (optional)</span>
+                                <input type="text" id="scanBrandInput" placeholder="Fairlife">
+                            </label>
+                            <button class="action-button action-button--secondary" type="button" id="scanLabelButton">Read label</button>
+                        </div>
+                        <details class="ocr-panel">
+                            <summary>Scanned text</summary>
+                            <pre id="ocrTextOutput">No OCR text yet.</pre>
+                        </details>
+                    </div>
+
+                    <div class="assistant-pane" data-assistant-pane="manual">
+                        <p class="eyebrow">Quick add</p>
+                        <div class="manual-grid">
+                            <label>
+                                <span>Name</span>
+                                <input type="text" id="manualNameInput" placeholder="Chicken rice bowl">
+                            </label>
+                            <label>
+                                <span>Calories</span>
+                                <input type="number" id="manualCaloriesInput" min="0" step="0.1">
+                            </label>
+                            <label>
+                                <span>Protein</span>
+                                <input type="number" id="manualProteinInput" min="0" step="0.1">
+                            </label>
+                            <label>
+                                <span>Carbs</span>
+                                <input type="number" id="manualCarbsInput" min="0" step="0.1">
+                            </label>
+                            <label>
+                                <span>Fat</span>
+                                <input type="number" id="manualFatInput" min="0" step="0.1">
+                            </label>
+                            <button class="action-button" type="button" id="manualAddButton">Add to log</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Review estimate</p>
+                            <h2 class="section-title">Edit before saving</h2>
+                        </div>
+                        <span class="chip" id="estimateSourcePill">No estimate</span>
+                    </div>
+                    <div class="editor-grid">
+                        <label>
+                            <span>Name</span>
+                            <input type="text" id="editorName">
+                        </label>
+                        <label>
+                            <span>Brand</span>
+                            <input type="text" id="editorBrand">
+                        </label>
+                        <label>
+                            <span>Amount</span>
+                            <input type="number" id="editorAmount" min="0.1" step="0.1" value="1">
+                        </label>
+                        <label>
+                            <span>Unit</span>
+                            <input type="text" id="editorUnit" value="serving">
+                        </label>
+                        <label>
+                            <span>Calories</span>
+                            <input type="number" id="editorCalories" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Protein</span>
+                            <input type="number" id="editorProtein" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Carbs</span>
+                            <input type="number" id="editorCarbs" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Fat</span>
+                            <input type="number" id="editorFat" min="0" step="0.1">
+                        </label>
+                        <label class="full-span">
+                            <span>Notes</span>
+                            <textarea id="editorNotes" rows="3"></textarea>
+                        </label>
+                    </div>
+                    <div class="button-stack">
+                        <button class="action-button" type="button" id="addEstimateToLogButton">Add items to log</button>
+                        <button class="ghost-button" type="button" id="saveEstimateMealButton">Save as meal</button>
+                        <button class="ghost-button" type="button" id="archiveEstimateItemButton">Archive in My Foods</button>
+                    </div>
+                </section>
+            </section>
+
+            <section class="screen" data-screen="fast-food">
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Fast food</p>
+                            <h2 class="section-title">Restaurant tabs</h2>
+                        </div>
+                    </div>
+                    <div class="restaurant-tabs" id="restaurantTabs"></div>
+                    <div class="inline-row">
+                        <input type="search" id="fastFoodSearchInput" placeholder="Search nuggets, burrito, fries...">
+                        <input type="number" id="fastFoodServingInput" min="0.1" step="0.1" value="1">
+                    </div>
+                    <div class="food-list" id="fastFoodItemsList"></div>
+                </section>
+            </section>
+
+            <section class="screen" data-screen="goals">
+                <section class="panel-card">
+                    <div class="panel-card__header">
+                        <div>
+                            <p class="eyebrow">Daily goals</p>
+                            <h2 class="section-title">Targets & defaults</h2>
+                        </div>
+                    </div>
+                    <div class="manual-grid">
+                        <label>
+                            <span>Daily calorie goal</span>
+                            <input type="number" id="goalCaloriesInput" min="0" step="1">
+                        </label>
+                        <label>
+                            <span>Protein goal</span>
+                            <input type="number" id="goalProteinInput" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Carbs goal</span>
+                            <input type="number" id="goalCarbsInput" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Fat goal</span>
+                            <input type="number" id="goalFatInput" min="0" step="0.1">
+                        </label>
+                        <label>
+                            <span>Default calories burned</span>
+                            <input type="number" id="goalBurnedInput" min="0" step="1">
+                        </label>
+                        <label>
+                            <span>Burned for selected day</span>
+                            <input type="number" id="dayBurnedInput" min="0" step="1">
+                        </label>
+                    </div>
+                    <div class="button-stack">
+                        <button class="action-button" type="button" id="saveGoalsButton">Save goals</button>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <nav class="bottom-nav">
+        <button class="nav-item is-active" type="button" data-screen-target="dashboard">
+            <span class="nav-item__icon">◔</span>
+            <span>Today</span>
+        </button>
+        <button class="nav-item" type="button" data-screen-target="library">
+            <span class="nav-item__icon">▣</span>
+            <span>Library</span>
+        </button>
+        <button class="nav-item nav-item--primary" type="button" data-screen-target="assistant">
+            <span class="nav-item__icon">＋</span>
+            <span>Add</span>
+        </button>
+        <button class="nav-item" type="button" data-screen-target="fast-food">
+            <span class="nav-item__icon">◫</span>
+            <span>Fast Food</span>
+        </button>
+        <button class="nav-item" type="button" data-screen-target="goals">
+            <span class="nav-item__icon">⚙</span>
+            <span>Goals</span>
+        </button>
+    </nav>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="./assets/js/fast-food-catalog.js"></script>
+    <script src="./assets/js/app.js"></script>
+</body>
+</html>
