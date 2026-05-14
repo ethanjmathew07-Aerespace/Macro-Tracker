@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-card hero-card--dining">
+    <p class="eyebrow">Dining Sync</p>
+    <h1>Pull the live dining hall menu into your tracker.</h1>
+    <p class="hero-copy">This page refreshes the menu when it opens, keeps a local snapshot if sync fails, and lets you log servings straight into today’s totals.</p>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <p class="eyebrow">Live Menu</p>
+            <h2>{{ default_location }}</h2>
+        </div>
+        <button type="button" id="refreshButton" class="ghost-button">Refresh now</button>
+    </div>
+
+    <div class="toolbar">
+        <label class="toolbar-field">
+            <span>Date</span>
+            <input type="date" id="dateInput" value="{{ default_date }}">
+        </label>
+
+        <label class="toolbar-field toolbar-field--wide">
+            <span>Search</span>
+            <input type="search" id="searchInput" placeholder="Chicken, pasta, yogurt...">
+        </label>
+    </div>
+
+    <div class="toolbar toolbar--compact">
+        <div class="serving-picker" id="servingPicker">
+            <button type="button" class="chip-button" data-serving="0.5">0.5x</button>
+            <button type="button" class="chip-button is-active" data-serving="1">1x</button>
+            <button type="button" class="chip-button" data-serving="2">2x</button>
+            <label class="custom-serving">
+                <span>Custom</span>
+                <input type="number" id="customServingInput" min="0.1" step="0.1" value="1">
+            </label>
+        </div>
+        <span class="muted-chip" id="syncMeta">Syncing menu…</span>
+    </div>
+
+    <div id="menuBanner"></div>
+    <div id="periodTabs" class="period-tabs"></div>
+    <div id="menuContent" class="stack"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const diningState = {
+    payload: null,
+    currentPeriod: '',
+    search: '',
+    selectedServing: 1,
+    usingCustomServing: false,
+    isRefreshing: false,
+};
+
+const dateInput = document.getElementById('dateInput');
+const searchInput = document.getElementById('searchInput');
+const servingPicker = document.getElementById('servingPicker');
+const customServingInput = document.getElementById('customServingInput');
+const refreshButton = document.getElementById('refreshButton');
+const menuBanner = document.getElementById('menuBanner');
+const periodTabs = document.getElementById('periodTabs');
+const menuContent = document.getElementById('menuContent');
+const syncMeta = document.getElementById('syncMeta');
+
+function currentServings() {
+    if (diningState.usingCustomServing) {
+        return Math.max(0.1, Number(customServingInput.value || 1));
+    }
+    return diningState.selectedServing;
+}
+
+function renderBanner(payload) {
+    if (payload.status === 'error') {
+        menuBanner.innerHTML = `
+            <div class="banner banner--error">
+                <strong>Sync failed.</strong>
+                <span>${mt.escapeHtml(payload.error || 'The menu could not be loaded.')}</span>
+            </div>
+        `;
+        return;
+    }
+
+    if (payload.status === 'refreshing') {
+        menuBanner.innerHTML = `
+            <div class="banner banner--warning">
+                <strong>Live sync in progress.</strong>
+                <span>${mt.escapeHtml(payload.warning || 'The dining hall snapshot is still being refreshed.')}</span>
+            </div>
+        `;
+        return;
+    }
+
+    const pieces = [];
+    if (payload.status === 'stale') {
+        pieces.push('<strong>Showing cached menu.</strong>');
+    } else {
+        pieces.push('<strong>Live sync complete.</strong>');
+    }
+    if (payload.warning) {
+        pieces.push(`<span>${mt.escapeHtml(payload.warning)}</span>`);
+    }
+    menuBanner.innerHTML = `<div class="banner ${payload.status === 'stale' ? 'banner--warning' : 'banner--success'}">${pieces.join(' ')}</div>`;
+}
+
+function renderMenu() {
+    const payload = diningState.payload;
+    if (!payload) {
+        menuContent.innerHTML = '<div class="empty-state"><h3>Loading menu</h3><p>Fetching the latest dining hall data.</p></div>';
+        return;
+    }
+
+    renderBanner(payload);
+    if (diningState.isRefreshing && payload.fetched_at) {
+        syncMeta.textContent = `Showing ${payload.status === 'stale' ? 'cached' : 'saved'} snapshot while refresh runs…`;
+    } else if (payload.status === 'refreshing') {
+        syncMeta.textContent = 'Live sync in progress…';
+    } else {
+        syncMeta.textContent = payload.fetched_at
+            ? `${payload.status === 'stale' ? 'Cached' : 'Updated'} ${new Date(payload.fetched_at).toLocaleString()}`
+            : 'No snapshot yet';
+    }
+
+    const periods = Object.keys(payload.periods || {});
+    if (!periods.length) {
+        periodTabs.innerHTML = '';
+        menuContent.innerHTML = `
+            <div class="empty-state">
+                <h3>${payload.status === 'refreshing' ? 'Sync in progress' : 'No menu available'}</h3>
+                <p>${mt.escapeHtml(payload.error || payload.warning || 'No items were published for this date.')}</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!periods.includes(diningState.currentPeriod)) {
+        diningState.currentPeriod = periods[0];
+    }
+
+    periodTabs.innerHTML = periods.map((period) => `
+        <button type="button" class="period-tab ${period === diningState.currentPeriod ? 'is-active' : ''}" data-period="${mt.escapeHtml(period)}">
+            ${mt.escapeHtml(period)}
+        </button>
+    `).join('');
+
+    const search = diningState.search.trim().toLowerCase();
+    const items = (payload.periods[diningState.currentPeriod] || []).filter((item) => {
+        const haystack = `${item.name} ${item.station} ${(item.ingredients || []).join(' ')}`.toLowerCase();
+        return !search || haystack.includes(search);
+    });
+
+    if (!items.length) {
+        menuContent.innerHTML = `
+            <div class="empty-state">
+                <h3>No matching items</h3>
+                <p>Try a different search or switch meal periods.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const byStation = items.reduce((result, item) => {
+        const station = item.station || 'General';
+        result[station] = result[station] || [];
+        result[station].push(item);
+        return result;
+    }, {});
+
+    menuContent.innerHTML = Object.entries(byStation).map(([station, stationItems]) => `
+        <section class="menu-station">
+            <div class="menu-station__header">
+                <h3>${mt.escapeHtml(station)}</h3>
+                <span class="muted-chip">${stationItems.length} item${stationItems.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="menu-card-grid">
+                ${stationItems.map((item) => `
+                    <article class="menu-card">
+                        <div class="menu-card__content">
+                            <div class="meal-card__title-row">
+                                <h4>${mt.escapeHtml(item.name)}</h4>
+                                <span class="badge badge--neutral">${mt.escapeHtml(item.serving_label || '1 serving')}</span>
+                            </div>
+                            <p class="meta-row">
+                                ${mt.number(item.calories)} cal
+                                <span>•</span>
+                                ${mt.number(item.protein_g)}g P
+                                <span>•</span>
+                                ${mt.number(item.carbs_g)}g C
+                                <span>•</span>
+                                ${mt.number(item.fat_g)}g F
+                            </p>
+                            ${(item.ingredients || []).length ? `<p class="subtle-copy">Ingredients: ${mt.escapeHtml(item.ingredients.join(', '))}</p>` : ''}
+                            ${(item.allergens || []).length ? `<p class="subtle-copy">Allergens: ${mt.escapeHtml(item.allergens.join(', '))}</p>` : ''}
+                        </div>
+                        <button type="button" class="primary-button" data-log-item="${item.id}">Log ${mt.number(currentServings())}x</button>
+                    </article>
+                `).join('')}
+            </div>
+        </section>
+    `).join('');
+}
+
+async function loadMenu(refresh = true, options = {}) {
+    const preserveExisting = options.preserveExisting && !!diningState.payload;
+    diningState.isRefreshing = refresh;
+    syncMeta.textContent = refresh ? 'Refreshing menu…' : 'Loading cached menu…';
+    if (!preserveExisting) {
+        menuContent.innerHTML = '<div class="empty-state"><h3>Loading menu</h3><p>Pulling the dining hall snapshot.</p></div>';
+    }
+
+    try {
+        diningState.payload = await mt.json(`/api/menu?date=${encodeURIComponent(dateInput.value)}&refresh=${refresh}`);
+    } catch (error) {
+        diningState.payload = error.data || {
+            status: 'error',
+            error: error.message,
+            periods: {},
+            warning: null,
+            fetched_at: null,
+        };
+    } finally {
+        diningState.isRefreshing = false;
+    }
+
+    renderMenu();
+}
+
+async function loadMenuFast() {
+    await loadMenu(false);
+    if (diningState.payload && diningState.payload.status !== 'error') {
+        void loadMenu(true, { preserveExisting: true });
+        return;
+    }
+    await loadMenu(true);
+}
+
+periodTabs.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-period]');
+    if (!button) return;
+    diningState.currentPeriod = button.dataset.period;
+    renderMenu();
+});
+
+menuContent.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-log-item]');
+    if (!button) return;
+
+    button.disabled = true;
+    try {
+        await mt.json('/api/menu/log', {
+            method: 'POST',
+            body: JSON.stringify({
+                date: dateInput.value,
+                item_id: button.dataset.logItem,
+                servings: currentServings(),
+            }),
+        });
+        mt.showToast('Dining item logged.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    } finally {
+        button.disabled = false;
+    }
+});
+
+servingPicker.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-serving]');
+    if (!button) return;
+
+    diningState.usingCustomServing = false;
+    diningState.selectedServing = Number(button.dataset.serving);
+    servingPicker.querySelectorAll('[data-serving]').forEach((chip) => chip.classList.remove('is-active'));
+    button.classList.add('is-active');
+    renderMenu();
+});
+
+customServingInput.addEventListener('focus', () => {
+    diningState.usingCustomServing = true;
+    servingPicker.querySelectorAll('[data-serving]').forEach((chip) => chip.classList.remove('is-active'));
+    renderMenu();
+});
+
+customServingInput.addEventListener('input', () => {
+    diningState.usingCustomServing = true;
+    renderMenu();
+});
+
+dateInput.addEventListener('change', () => loadMenuFast());
+searchInput.addEventListener('input', (event) => {
+    diningState.search = event.target.value;
+    renderMenu();
+});
+refreshButton.addEventListener('click', () => loadMenu(true));
+
+loadMenuFast();
+</script>
+{% endblock %}

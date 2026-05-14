@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block page_title_text %}Archive & Saved Items{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-label">Reusable nutrition</p>
+        <h2 class="hero-heading">Archive grocery items once, save custom meals once, and re-log them whenever you need them.</h2>
+    </div>
+    <label class="hero-date">
+        <span>Date</span>
+        <input type="date" id="libraryDate" value="{{ current_date }}">
+    </label>
+</section>
+
+<section class="dashboard-grid dashboard-grid--wide">
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Archived items</p>
+                <h3>Grocery & label library</h3>
+            </div>
+            <span class="chip">{{ library_items|length }} items</span>
+        </div>
+        <div class="entry-list">
+            {% if library_items %}
+                {% for item in library_items %}
+                    <article class="entry-card">
+                        <div>
+                            <div class="entry-card__top">
+                                <h3>{{ item.brand ~ ' - ' if item.brand else '' }}{{ item.name }}</h3>
+                                <span class="chip">{{ item.source }}</span>
+                            </div>
+                            <p>{{ item.calories }} kcal · {{ item.protein_g }} P · {{ item.carbs_g }} C · {{ item.fat_g }} F</p>
+                            <p>{{ item.serving_amount }} {{ item.serving_unit }}</p>
+                            <div class="button-row">
+                                <input type="number" min="0.1" step="0.1" value="1" data-library-serving="{{ item.id }}">
+                                <button type="button" class="primary-button" data-log-library="{{ item.id }}">Log item</button>
+                                <button type="button" class="ghost-button" data-delete-library="{{ item.id }}">Delete</button>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            {% else %}
+                <div class="empty-card">
+                    <h3>No archived items yet</h3>
+                    <p>Use the AI Log page to scan a label or save a grocery item.</p>
+                </div>
+            {% endif %}
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Saved meals</p>
+                <h3>Reusable meal templates</h3>
+            </div>
+            <span class="chip">{{ saved_meals|length }} meals</span>
+        </div>
+        <div class="entry-list">
+            {% if saved_meals %}
+                {% for meal in saved_meals %}
+                    <article class="entry-card">
+                        <div>
+                            <div class="entry-card__top">
+                                <h3>{{ meal.name }}</h3>
+                                <span class="chip">meal</span>
+                            </div>
+                            <p>{{ meal.calories }} kcal · {{ meal.protein_g }} P · {{ meal.carbs_g }} C · {{ meal.fat_g }} F</p>
+                            <div class="button-row">
+                                <input type="number" min="0.1" step="0.1" value="1" data-saved-serving="{{ meal.id }}">
+                                <button type="button" class="primary-button" data-log-saved="{{ meal.id }}">Log meal</button>
+                                <button type="button" class="ghost-button" data-delete-saved="{{ meal.id }}">Delete</button>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            {% else %}
+                <div class="empty-card">
+                    <h3>No saved meals yet</h3>
+                    <p>Save your common meals from the AI Log page or dashboard quick add.</p>
+                </div>
+            {% endif %}
+        </div>
+    </article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const libraryDate = document.getElementById('libraryDate');
+
+document.querySelector('.screen-body').addEventListener('click', async (event) => {
+    const deleteLibraryButton = event.target.closest('[data-delete-library]');
+    if (deleteLibraryButton) {
+        try {
+            await mt.json(`/api/library-items/${deleteLibraryButton.dataset.deleteLibrary}`, {
+                method: 'DELETE',
+            });
+            deleteLibraryButton.closest('.entry-card')?.remove();
+            mt.showToast('Archived item removed.');
+        } catch (error) {
+            mt.showToast(error.message, 'error');
+        }
+        return;
+    }
+
+    const libraryButton = event.target.closest('[data-log-library]');
+    if (libraryButton) {
+        const itemId = libraryButton.dataset.logLibrary;
+        const servings = document.querySelector(`[data-library-serving="${itemId}"]`)?.value || 1;
+        try {
+            await mt.json(`/api/library-items/${itemId}/log`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    date: libraryDate.value,
+                    servings,
+                }),
+            });
+            mt.showToast('Archived item logged.');
+        } catch (error) {
+            mt.showToast(error.message, 'error');
+        }
+        return;
+    }
+
+    const deleteSavedButton = event.target.closest('[data-delete-saved]');
+    if (deleteSavedButton) {
+        try {
+            await mt.json(`/api/saved-meals/${deleteSavedButton.dataset.deleteSaved}`, {
+                method: 'DELETE',
+            });
+            deleteSavedButton.closest('.entry-card')?.remove();
+            mt.showToast('Saved meal removed.');
+        } catch (error) {
+            mt.showToast(error.message, 'error');
+        }
+        return;
+    }
+
+    const savedButton = event.target.closest('[data-log-saved]');
+    if (!savedButton) return;
+
+    const savedMealId = savedButton.dataset.logSaved;
+    const servings = document.querySelector(`[data-saved-serving="${savedMealId}"]`)?.value || 1;
+    try {
+        await mt.json(`/api/saved-meals/${savedMealId}/log`, {
+            method: 'POST',
+            body: JSON.stringify({
+                date: libraryDate.value,
+                servings,
+            }),
+        });
+        mt.showToast('Saved meal logged.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+</script>
+{% endblock %}

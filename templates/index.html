@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block page_title_text %}Performance Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-label">Daily strategy</p>
+        <h2 class="hero-heading">Track calories first, macros second, and let the weekly deficit tell the real story.</h2>
+        <p class="hero-copy">This first draft centers the app on energy balance, macro targets, AI-assisted food entry, and an archive of reusable grocery items.</p>
+    </div>
+    <label class="hero-date">
+        <span>Date</span>
+        <input type="date" id="dashboardDate" value="{{ default_date }}">
+    </label>
+</section>
+
+<section class="insight-strip" id="insightStrip">
+    <article class="insight-pill insight-pill--blue">
+        <span>Consumed</span>
+        <strong id="insightConsumed">0 kcal</strong>
+    </article>
+    <article class="insight-pill insight-pill--green">
+        <span>Remaining</span>
+        <strong id="insightRemaining">0 kcal</strong>
+    </article>
+    <article class="insight-pill insight-pill--coral">
+        <span>Burned</span>
+        <strong id="insightBurn">0 kcal</strong>
+    </article>
+    <article class="insight-pill insight-pill--purple">
+        <span>Deficit</span>
+        <strong id="insightDeficit">0 kcal</strong>
+    </article>
+</section>
+
+<section class="dashboard-grid">
+    <article class="card card--feature">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Calories</p>
+                <h3>Daily target</h3>
+            </div>
+            <span class="chip chip--accent" id="dailyDeficitChip"></span>
+        </div>
+        <div class="ring-layout">
+            <div class="goal-ring" id="goalRing">
+                <div class="goal-ring__inner">
+                    <strong id="ringCalories">0</strong>
+                    <span id="ringGoal">of 0</span>
+                </div>
+            </div>
+            <div class="ring-stats">
+                <div class="metric-row">
+                    <span>Calories burned</span>
+                    <strong id="burnValue">0</strong>
+                </div>
+                <div class="metric-row">
+                    <span>Remaining</span>
+                    <strong id="remainingValue">0</strong>
+                </div>
+                <label class="inline-editor">
+                    <span>Edit burned</span>
+                    <div class="inline-editor__row">
+                        <input type="number" id="burnInput" min="0" step="1">
+                        <button type="button" class="pill-button" id="saveBurnButton">Save</button>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Macros</p>
+                <h3>Nutrition targets</h3>
+            </div>
+            <span class="chip">Daily</span>
+        </div>
+        <div class="macro-stack" id="macroStack"></div>
+    </article>
+</section>
+
+<section class="dashboard-grid dashboard-grid--wide">
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Weekly deficit</p>
+                <h3>Energy balance</h3>
+            </div>
+            <span class="chip chip--success" id="weeklyDeficitChip"></span>
+        </div>
+        <div class="weekly-bars" id="weeklyBars"></div>
+        <div class="weekly-summary">
+            <div>
+                <span>Nutrition</span>
+                <strong id="weeklyNutrition"></strong>
+            </div>
+            <div>
+                <span>Expenditure</span>
+                <strong id="weeklyBurn"></strong>
+            </div>
+            <div>
+                <span>Difference</span>
+                <strong id="weeklyDifference"></strong>
+            </div>
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Archive</p>
+                <h3>Weekly deficit history</h3>
+            </div>
+        </div>
+        <div class="archive-list" id="archiveList"></div>
+    </article>
+</section>
+
+<section class="dashboard-grid dashboard-grid--wide">
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Quick add</p>
+                <h3>Manual meal entry</h3>
+            </div>
+        </div>
+        <form id="manualMealForm" class="form-grid form-grid--compact">
+            <input type="hidden" name="date" value="{{ default_date }}">
+            <label>
+                Name
+                <input type="text" name="name" placeholder="Chicken rice bowl" required>
+            </label>
+            <label>
+                Calories
+                <input type="number" name="calories" min="0" step="0.1" required>
+            </label>
+            <label>
+                Protein
+                <input type="number" name="protein_g" min="0" step="0.1" required>
+            </label>
+            <label>
+                Carbs
+                <input type="number" name="carbs_g" min="0" step="0.1" required>
+            </label>
+            <label>
+                Fat
+                <input type="number" name="fat_g" min="0" step="0.1" required>
+            </label>
+            <label>
+                Servings
+                <input type="number" name="servings" min="0.1" step="0.1" value="1">
+            </label>
+            <button type="submit" class="primary-button">Add meal</button>
+        </form>
+    </article>
+
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Food log</p>
+                <h3>Today’s meals</h3>
+            </div>
+            <span class="chip" id="mealCountChip"></span>
+        </div>
+        <div class="entry-list" id="mealList"></div>
+    </article>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let dashboardState = {{ dashboard|tojson }};
+
+const dateInput = document.getElementById('dashboardDate');
+const ringCalories = document.getElementById('ringCalories');
+const ringGoal = document.getElementById('ringGoal');
+const goalRing = document.getElementById('goalRing');
+const burnValue = document.getElementById('burnValue');
+const remainingValue = document.getElementById('remainingValue');
+const dailyDeficitChip = document.getElementById('dailyDeficitChip');
+const burnInput = document.getElementById('burnInput');
+const saveBurnButton = document.getElementById('saveBurnButton');
+const insightConsumed = document.getElementById('insightConsumed');
+const insightRemaining = document.getElementById('insightRemaining');
+const insightBurn = document.getElementById('insightBurn');
+const insightDeficit = document.getElementById('insightDeficit');
+const macroStack = document.getElementById('macroStack');
+const weeklyBars = document.getElementById('weeklyBars');
+const weeklyNutrition = document.getElementById('weeklyNutrition');
+const weeklyBurn = document.getElementById('weeklyBurn');
+const weeklyDifference = document.getElementById('weeklyDifference');
+const weeklyDeficitChip = document.getElementById('weeklyDeficitChip');
+const archiveList = document.getElementById('archiveList');
+const mealList = document.getElementById('mealList');
+const mealCountChip = document.getElementById('mealCountChip');
+const manualMealForm = document.getElementById('manualMealForm');
+
+function formatSigned(value) {
+    const number = Number(value || 0);
+    return `${number > 0 ? '+' : ''}${mt.number(number)}`;
+}
+
+function renderDashboard(payload) {
+    dashboardState = payload;
+    const { day, settings, weekly, weekly_deficit_total, weekly_calories_total, weekly_burn_total, deficit_archive } = payload;
+
+    dateInput.value = payload.date;
+    manualMealForm.elements.date.value = payload.date;
+    ringCalories.textContent = mt.number(day.totals.calories);
+    ringGoal.textContent = `of ${mt.number(settings.daily_calorie_goal)}`;
+    burnValue.textContent = `${mt.number(day.calories_burned)} kcal`;
+    remainingValue.textContent = `${mt.number(day.remaining_calories)} kcal`;
+    insightConsumed.textContent = `${mt.number(day.totals.calories)} kcal`;
+    insightRemaining.textContent = `${mt.number(day.remaining_calories)} kcal`;
+    insightBurn.textContent = `${mt.number(day.calories_burned)} kcal`;
+    insightDeficit.textContent = `${formatSigned(day.deficit)} kcal`;
+    burnInput.value = mt.number(day.calories_burned);
+    dailyDeficitChip.textContent = `${formatSigned(day.deficit)} kcal`;
+    weeklyDeficitChip.textContent = `${formatSigned(weekly_deficit_total)} kcal`;
+    weeklyNutrition.textContent = `${mt.number(weekly_calories_total)} kcal`;
+    weeklyBurn.textContent = `${mt.number(weekly_burn_total)} kcal`;
+    weeklyDifference.textContent = `${formatSigned(weekly_deficit_total)} kcal`;
+    goalRing.style.setProperty('--progress', payload.calorie_progress);
+    dailyDeficitChip.classList.toggle('chip--success', Number(day.deficit) >= 0);
+    dailyDeficitChip.classList.toggle('chip--warning', Number(day.deficit) < 0);
+    weeklyDeficitChip.classList.toggle('chip--success', Number(weekly_deficit_total) >= 0);
+    weeklyDeficitChip.classList.toggle('chip--warning', Number(weekly_deficit_total) < 0);
+
+    const macroCards = [
+        ['Protein', day.totals.protein_g, settings.daily_protein_goal, payload.macro_progress.protein, 'protein'],
+        ['Carbs', day.totals.carbs_g, settings.daily_carbs_goal, payload.macro_progress.carbs, 'carbs'],
+        ['Fat', day.totals.fat_g, settings.daily_fat_goal, payload.macro_progress.fat, 'fat'],
+    ];
+
+    macroStack.innerHTML = macroCards.map(([label, value, goal, progress, tone]) => `
+        <article class="macro-card macro-card--${tone}">
+            <div class="macro-card__top">
+                <span>${label}</span>
+                <strong>${mt.number(value)} / ${mt.number(goal)}</strong>
+            </div>
+            <div class="macro-track">
+                <span class="macro-fill" style="width: ${Math.min(125, progress * 100)}%"></span>
+            </div>
+        </article>
+    `).join('');
+
+    weeklyBars.innerHTML = weekly.map((entry) => `
+        <div class="weekly-bar">
+            <span class="weekly-bar__label">${new Date(entry.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1)}</span>
+            <div class="weekly-bar__track">
+                <span class="weekly-bar__nutrition" style="height: ${Math.min(100, (entry.calories / Math.max(1, settings.daily_calorie_goal * 1.2)) * 100)}%"></span>
+                <span class="weekly-bar__burn" style="height: ${Math.min(100, (entry.calories_burned / Math.max(1, settings.default_calories_burned * 1.2)) * 100)}%"></span>
+            </div>
+            <strong>${formatSigned(entry.deficit)}</strong>
+        </div>
+    `).join('');
+
+    archiveList.innerHTML = deficit_archive.map((entry) => `
+        <article class="archive-card">
+            <div>
+                <span>${entry.week_start}</span>
+                <strong>${entry.week_end}</strong>
+            </div>
+            <div class="archive-card__value ${entry.weekly_deficit >= 0 ? 'is-positive' : 'is-negative'}">
+                ${formatSigned(entry.weekly_deficit)} kcal
+            </div>
+        </article>
+    `).join('');
+
+    if (!day.meals.length) {
+        mealCountChip.textContent = '0 meals';
+        mealList.innerHTML = `
+            <div class="empty-card">
+                <h3>No meals logged yet</h3>
+                <p>Use the AI Log tab, fast food tab, or quick add form to start filling the day.</p>
+            </div>
+        `;
+        return;
+    }
+
+    mealCountChip.textContent = `${day.meals.length} meals`;
+    mealList.innerHTML = day.meals.map((meal) => `
+        <article class="entry-card">
+            <div>
+                <div class="entry-card__top">
+                    <h3>${mt.escapeHtml(meal.name)}</h3>
+                    <span class="chip">${mt.escapeHtml(meal.source.replaceAll('_', ' '))}</span>
+                </div>
+                <p>${mt.number(meal.calories)} kcal · ${mt.number(meal.protein_g)} P · ${mt.number(meal.carbs_g)} C · ${mt.number(meal.fat_g)} F</p>
+            </div>
+            <button type="button" class="ghost-button" data-delete-meal="${meal.id}">Delete</button>
+        </article>
+    `).join('');
+}
+
+async function loadDashboard(date) {
+    const payload = await mt.json(`/api/dashboard?date=${encodeURIComponent(date)}`);
+    renderDashboard(payload);
+}
+
+dateInput.addEventListener('change', () => {
+    loadDashboard(dateInput.value).catch((error) => mt.showToast(error.message, 'error'));
+});
+
+saveBurnButton.addEventListener('click', async () => {
+    try {
+        const result = await mt.json('/api/day/burn', {
+            method: 'POST',
+            body: JSON.stringify({
+                date: dateInput.value,
+                calories_burned: burnInput.value,
+            }),
+        });
+        renderDashboard(result.dashboard);
+        mt.showToast('Calories burned updated.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+manualMealForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(manualMealForm).entries());
+    try {
+        const result = await mt.json('/api/meals', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        renderDashboard(result.dashboard);
+        manualMealForm.reset();
+        manualMealForm.elements.date.value = dashboardState.date;
+        manualMealForm.elements.servings.value = '1';
+        mt.showToast('Meal added.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+mealList.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-delete-meal]');
+    if (!button) return;
+
+    try {
+        await mt.json(`/api/meals/${button.dataset.deleteMeal}`, { method: 'DELETE' });
+        await loadDashboard(dashboardState.date);
+        mt.showToast('Meal deleted.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+renderDashboard(dashboardState);
+</script>
+{% endblock %}

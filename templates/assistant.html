@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+
+{% block page_title_text %}AI Log & Label Scan{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-label">Smart intake</p>
+        <h2 class="hero-heading">Describe the food, type known calories if you have them, or scan a nutrition label and turn it into a reusable item.</h2>
+    </div>
+    <div class="hero-chip-row">
+        <span class="chip chip--success">{{ saved_meals|length }} saved meals</span>
+        <span class="chip chip--accent">{{ library_items|length }} archived items</span>
+    </div>
+</section>
+
+<section class="dashboard-grid dashboard-grid--wide">
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Text assistant</p>
+                <h3>Estimate from description</h3>
+            </div>
+        </div>
+        <form id="assistantTextForm" class="form-grid">
+            <label>
+                Date
+                <input type="date" name="date" value="{{ default_date }}">
+            </label>
+            <label>
+                Food description
+                <textarea name="query" rows="4" placeholder="200g chicken breast and 1 cup rice, 620 calories if known"></textarea>
+            </label>
+            <label>
+                Known calories (optional)
+                <input type="number" name="known_calories" min="0" step="0.1" placeholder="620">
+            </label>
+            <button type="submit" class="primary-button">Estimate food</button>
+        </form>
+    </article>
+
+    <article class="card">
+        <div class="card-head">
+            <div>
+                <p class="card-kicker">Label scan</p>
+                <h3>Read a nutrition label photo</h3>
+            </div>
+        </div>
+        <form id="labelScanForm" class="form-grid" enctype="multipart/form-data">
+            <label>
+                Date
+                <input type="date" name="date" value="{{ default_date }}">
+            </label>
+            <label>
+                Item name (optional)
+                <input type="text" name="name" placeholder="Fairlife Protein Shake">
+            </label>
+            <label>
+                Brand (optional)
+                <input type="text" name="brand" placeholder="Fairlife">
+            </label>
+            <div class="capture-panel">
+                <p class="capture-panel__title">Nutrition label photo</p>
+                <p class="capture-panel__copy">On iPhone you can open the camera directly, or choose an existing picture from Photos.</p>
+                <div class="button-row">
+                    <button type="button" class="primary-button" id="openCameraButton">Take photo</button>
+                    <button type="button" class="ghost-button" id="openPhotosButton">Choose from photos</button>
+                </div>
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+                <input type="file" id="photoLibraryInput" accept="image/*" hidden>
+                <p class="capture-panel__filename" id="selectedLabelFile">No image selected yet.</p>
+            </div>
+            <button type="submit" class="primary-button">Scan label</button>
+        </form>
+    </article>
+</section>
+
+<section class="card">
+    <div class="card-head">
+        <div>
+            <p class="card-kicker">Review & edit</p>
+            <h3>Estimated item</h3>
+        </div>
+        <span class="chip" id="estimateSourceChip">No estimate yet</span>
+    </div>
+    <form id="estimateEditor" class="form-grid form-grid--compact">
+        <label>
+            Date
+            <input type="date" name="date" value="{{ default_date }}">
+        </label>
+        <input type="hidden" name="source" value="assistant_text">
+        <label>
+            Name
+            <input type="text" name="name" placeholder="Food name">
+        </label>
+        <label>
+            Brand
+            <input type="text" name="brand" placeholder="Brand">
+        </label>
+        <label>
+            Serving amount
+            <input type="number" name="serving_amount" min="0.1" step="0.1" value="1">
+        </label>
+        <label>
+            Serving unit
+            <input type="text" name="serving_unit" value="serving">
+        </label>
+        <label>
+            Calories
+            <input type="number" name="calories" min="0" step="0.1">
+        </label>
+        <label>
+            Protein
+            <input type="number" name="protein_g" min="0" step="0.1">
+        </label>
+        <label>
+            Carbs
+            <input type="number" name="carbs_g" min="0" step="0.1">
+        </label>
+        <label>
+            Fat
+            <input type="number" name="fat_g" min="0" step="0.1">
+        </label>
+        <label class="form-grid__full">
+            Notes
+            <textarea name="notes" rows="3" placeholder="Source notes, scan notes, or custom adjustments"></textarea>
+        </label>
+        <div class="button-row form-grid__full">
+            <button type="button" class="primary-button" id="addEstimateMealButton">Add as meal</button>
+            <button type="button" class="ghost-button" id="saveEstimateMealButton">Save as meal</button>
+            <button type="button" class="ghost-button" id="archiveEstimateButton">Archive as item</button>
+        </div>
+    </form>
+    <details class="raw-text-panel">
+        <summary>Scanned label text</summary>
+        <pre id="ocrTextPreview">No OCR text yet.</pre>
+    </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const assistantTextForm = document.getElementById('assistantTextForm');
+const labelScanForm = document.getElementById('labelScanForm');
+const estimateEditor = document.getElementById('estimateEditor');
+const estimateSourceChip = document.getElementById('estimateSourceChip');
+const addEstimateMealButton = document.getElementById('addEstimateMealButton');
+const saveEstimateMealButton = document.getElementById('saveEstimateMealButton');
+const archiveEstimateButton = document.getElementById('archiveEstimateButton');
+const ocrTextPreview = document.getElementById('ocrTextPreview');
+const openCameraButton = document.getElementById('openCameraButton');
+const openPhotosButton = document.getElementById('openPhotosButton');
+const cameraInput = document.getElementById('cameraInput');
+const photoLibraryInput = document.getElementById('photoLibraryInput');
+const selectedLabelFile = document.getElementById('selectedLabelFile');
+
+function currentScanFile() {
+    return cameraInput.files[0] || photoLibraryInput.files[0] || null;
+}
+
+function syncSelectedFilename() {
+    const file = currentScanFile();
+    selectedLabelFile.textContent = file ? `${file.name}` : 'No image selected yet.';
+}
+
+function populateEstimate(estimate, sourceLabel) {
+    estimateEditor.elements.date.value = assistantTextForm.elements.date.value;
+    estimateEditor.elements.name.value = estimate.name || '';
+    estimateEditor.elements.brand.value = estimate.brand || '';
+    estimateEditor.elements.source.value = estimate.source || 'assistant_text';
+    estimateEditor.elements.serving_amount.value = estimate.serving_amount || 1;
+    estimateEditor.elements.serving_unit.value = estimate.serving_unit || 'serving';
+    estimateEditor.elements.calories.value = estimate.calories || 0;
+    estimateEditor.elements.protein_g.value = estimate.protein_g || 0;
+    estimateEditor.elements.carbs_g.value = estimate.carbs_g || 0;
+    estimateEditor.elements.fat_g.value = estimate.fat_g || 0;
+    estimateEditor.elements.notes.value = estimate.notes || '';
+    estimateSourceChip.textContent = sourceLabel;
+    ocrTextPreview.textContent = estimate.ocr_text || 'No OCR text yet.';
+}
+
+assistantTextForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(assistantTextForm).entries());
+    try {
+        const result = await mt.json('/api/assistant/estimate', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        populateEstimate(result.estimate, 'Text estimate');
+        mt.showToast('Food estimate ready.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+labelScanForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const image = currentScanFile();
+    if (!image) {
+        mt.showToast('Choose a nutrition label photo first.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('date', labelScanForm.elements.date.value);
+    formData.append('name', labelScanForm.elements.name.value);
+    formData.append('brand', labelScanForm.elements.brand.value);
+    formData.append('image', image);
+    try {
+        const response = await fetch('/api/assistant/scan-label', {
+            method: 'POST',
+            body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || 'Label scan failed.');
+        }
+        populateEstimate(payload.estimate, 'Nutrition label scan');
+        estimateEditor.elements.date.value = labelScanForm.elements.date.value;
+        mt.showToast('Nutrition label scanned.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+openCameraButton.addEventListener('click', () => cameraInput.click());
+openPhotosButton.addEventListener('click', () => photoLibraryInput.click());
+cameraInput.addEventListener('change', () => {
+    photoLibraryInput.value = '';
+    syncSelectedFilename();
+});
+photoLibraryInput.addEventListener('change', () => {
+    cameraInput.value = '';
+    syncSelectedFilename();
+});
+
+addEstimateMealButton.addEventListener('click', async () => {
+    const payload = Object.fromEntries(new FormData(estimateEditor).entries());
+    try {
+        await mt.json('/api/meals', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        mt.showToast('Estimate added as meal.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+saveEstimateMealButton.addEventListener('click', async () => {
+    const payload = Object.fromEntries(new FormData(estimateEditor).entries());
+    try {
+        await mt.json('/api/saved-meals', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        mt.showToast('Estimate saved as reusable meal.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+archiveEstimateButton.addEventListener('click', async () => {
+    const payload = Object.fromEntries(new FormData(estimateEditor).entries());
+    payload.source = 'assistant_archive';
+    payload.extracted_text = ocrTextPreview.textContent === 'No OCR text yet.' ? '' : ocrTextPreview.textContent;
+    try {
+        await mt.json('/api/library-items', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        mt.showToast('Item archived to your library.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+</script>
+{% endblock %}

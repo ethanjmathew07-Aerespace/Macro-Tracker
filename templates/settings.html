@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block page_title_text %}Targets & Defaults{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-label">Baseline settings</p>
+        <h2 class="hero-heading">Set your daily calorie target, macro targets, and your default calories burned so the weekly deficit can update automatically.</h2>
+    </div>
+</section>
+
+<section class="card card--narrow">
+    <div class="card-head">
+        <div>
+            <p class="card-kicker">Goals</p>
+            <h3>Daily targets</h3>
+        </div>
+    </div>
+
+    <form id="settingsForm" class="form-grid">
+        <label>
+            Daily calorie goal
+            <input type="number" name="daily_calorie_goal" min="0" step="1" value="{{ settings.daily_calorie_goal }}">
+        </label>
+        <label>
+            Daily protein goal
+            <input type="number" name="daily_protein_goal" min="0" step="0.1" value="{{ settings.daily_protein_goal }}">
+        </label>
+        <label>
+            Daily carbs goal
+            <input type="number" name="daily_carbs_goal" min="0" step="0.1" value="{{ settings.daily_carbs_goal }}">
+        </label>
+        <label>
+            Daily fat goal
+            <input type="number" name="daily_fat_goal" min="0" step="0.1" value="{{ settings.daily_fat_goal }}">
+        </label>
+        <label>
+            Default calories burned
+            <input type="number" name="default_calories_burned" min="0" step="1" value="{{ settings.default_calories_burned }}">
+        </label>
+        <button type="submit" class="primary-button">Save settings</button>
+    </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const settingsForm = document.getElementById('settingsForm');
+
+settingsForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(settingsForm).entries());
+    try {
+        await mt.json('/api/settings', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        mt.showToast('Settings saved.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+</script>
+{% endblock %}

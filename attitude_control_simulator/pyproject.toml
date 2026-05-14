@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "altitude-control-simulator"
+version = "0.1.0"
+description = "Standalone 3-axis spacecraft and UAV altitude control simulator with PID and LQR controllers."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0",
+  "matplotlib>=3.9",
+  "flask>=3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+altitude-control-simulator = "simulator:main"
+altitude-control-dashboard = "webapp:main"
+
+[tool.setuptools]
+py-modules = ["simulator", "webapp"]

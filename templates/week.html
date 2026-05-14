@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-card hero-card--alt">
+    <p class="eyebrow">Weekly Trends</p>
+    <h1>Your last seven days, side by side.</h1>
+    <p class="hero-copy">Use the weekly view to spot consistency, missed goals, and days where dining hall choices helped the most.</p>
+</section>
+
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <p class="eyebrow">Seven Day Snapshot</p>
+            <h2>Daily totals</h2>
+        </div>
+        <span class="muted-chip">Goals shown per day</span>
+    </div>
+
+    <div class="week-grid">
+        {% for day in week_data %}
+        <article class="week-card">
+            <div class="week-card__header">
+                <h3>{{ day.date }}</h3>
+                <span class="badge badge--neutral">{{ day.calories }} cal</span>
+            </div>
+
+            <div class="week-metric">
+                <div class="week-metric__label">
+                    <span>Protein</span>
+                    <strong>{{ day.protein_g }} / {{ settings.daily_protein_goal }}g</strong>
+                </div>
+                <div class="progress-shell"><span class="progress-fill" style="width: {{ (100 if settings.daily_protein_goal == 0 else [(day.protein_g / settings.daily_protein_goal) * 100, 100]|min) }}%"></span></div>
+            </div>
+
+            <div class="week-metric">
+                <div class="week-metric__label">
+                    <span>Carbs</span>
+                    <strong>{{ day.carbs_g }} / {{ settings.daily_carbs_goal }}g</strong>
+                </div>
+                <div class="progress-shell"><span class="progress-fill" style="width: {{ (100 if settings.daily_carbs_goal == 0 else [(day.carbs_g / settings.daily_carbs_goal) * 100, 100]|min) }}%"></span></div>
+            </div>
+
+            <div class="week-metric">
+                <div class="week-metric__label">
+                    <span>Fat</span>
+                    <strong>{{ day.fat_g }} / {{ settings.daily_fat_goal }}g</strong>
+                </div>
+                <div class="progress-shell"><span class="progress-fill" style="width: {{ (100 if settings.daily_fat_goal == 0 else [(day.fat_g / settings.daily_fat_goal) * 100, 100]|min) }}%"></span></div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+

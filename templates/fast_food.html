@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block page_title_text %}Fast Food Catalog{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-label">Restaurant shortcuts</p>
+        <h2 class="hero-heading">Keep the fast-food tab, switch restaurants quickly, and log a menu item into the selected day with one tap.</h2>
+    </div>
+    <label class="hero-date">
+        <span>Date</span>
+        <input type="date" id="fastFoodDate" value="{{ default_date }}">
+    </label>
+</section>
+
+<section class="card">
+    <div class="card-head">
+        <div>
+            <p class="card-kicker">Catalog</p>
+            <h3>Restaurant tabs</h3>
+        </div>
+    </div>
+    <div class="tab-row" id="restaurantTabs"></div>
+    <div class="search-row">
+        <input type="search" id="fastFoodSearch" placeholder="Search fries, nuggets, burrito...">
+        <input type="number" id="fastFoodServings" min="0.1" step="0.1" value="1">
+    </div>
+    <div class="entry-list" id="fastFoodItems"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let catalogState = { restaurants: [] };
+let activeRestaurant = '';
+
+const dateInput = document.getElementById('fastFoodDate');
+const searchInput = document.getElementById('fastFoodSearch');
+const servingsInput = document.getElementById('fastFoodServings');
+const restaurantTabs = document.getElementById('restaurantTabs');
+const fastFoodItems = document.getElementById('fastFoodItems');
+
+function renderCatalog() {
+    if (!catalogState.restaurants.length) {
+        fastFoodItems.innerHTML = '<div class="empty-card"><h3>No fast-food catalog loaded</h3><p>Try refreshing the page.</p></div>';
+        return;
+    }
+
+    if (!activeRestaurant) {
+        activeRestaurant = catalogState.restaurants[0].slug;
+    }
+
+    restaurantTabs.innerHTML = catalogState.restaurants.map((restaurant) => `
+        <button type="button" class="tab-button ${restaurant.slug === activeRestaurant ? 'is-active' : ''}" data-restaurant="${restaurant.slug}">
+            ${mt.escapeHtml(restaurant.name)}
+        </button>
+    `).join('');
+
+    const restaurant = catalogState.restaurants.find((item) => item.slug === activeRestaurant);
+    const search = searchInput.value.trim().toLowerCase();
+    const items = (restaurant?.items || []).filter((item) => {
+        const haystack = `${item.name} ${item.category} ${item.serving_label}`.toLowerCase();
+        return !search || haystack.includes(search);
+    });
+
+    if (!items.length) {
+        fastFoodItems.innerHTML = '<div class="empty-card"><h3>No matches</h3><p>Try another search or restaurant tab.</p></div>';
+        return;
+    }
+
+    fastFoodItems.innerHTML = items.map((item) => `
+        <article class="entry-card">
+            <div>
+                <div class="entry-card__top">
+                    <h3>${mt.escapeHtml(item.name)}</h3>
+                    <span class="chip">${mt.escapeHtml(item.category || 'Item')}</span>
+                </div>
+                <p>${mt.number(item.calories)} kcal · ${mt.number(item.protein_g)} P · ${mt.number(item.carbs_g)} C · ${mt.number(item.fat_g)} F</p>
+                <p>${mt.escapeHtml(item.serving_label || '1 serving')}</p>
+            </div>
+            <button type="button" class="primary-button" data-fast-food-log="${item.id}">Log item</button>
+        </article>
+    `).join('');
+}
+
+async function loadCatalog() {
+    const payload = await mt.json('/api/fast-food');
+    catalogState = payload;
+    renderCatalog();
+}
+
+restaurantTabs.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-restaurant]');
+    if (!button) return;
+    activeRestaurant = button.dataset.restaurant;
+    renderCatalog();
+});
+
+searchInput.addEventListener('input', renderCatalog);
+
+fastFoodItems.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-fast-food-log]');
+    if (!button) return;
+
+    try {
+        await mt.json('/api/fast-food/log', {
+            method: 'POST',
+            body: JSON.stringify({
+                date: dateInput.value,
+                item_id: button.dataset.fastFoodLog,
+                servings: servingsInput.value,
+            }),
+        });
+        mt.showToast('Fast-food item logged.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+loadCatalog().catch((error) => mt.showToast(error.message, 'error'));
+</script>
+{% endblock %}

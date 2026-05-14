@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <p class="eyebrow">Standalone Viewer</p>
+    <h1>Drone Cam</h1>
+    <p class="hero-copy">A separate control page for your repurposed drone camera. Save the Wi-Fi target, probe likely stream URLs, and open the live feed on your phone.</p>
+</section>
+
+<section class="layout">
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Connection</p>
+                <h2>Camera profile</h2>
+            </div>
+            <span class="chip" id="viewerModeChip">{{ camera_settings.viewer_mode }}</span>
+        </div>
+
+        <form id="cameraSettingsForm" class="form-grid">
+            <label>
+                Camera name
+                <input type="text" id="cameraNameInput" value="{{ camera_settings.camera_name }}" required>
+            </label>
+
+            <label>
+                Drone Wi-Fi SSID
+                <input type="text" id="wifiSsidInput" value="{{ camera_settings.wifi_ssid }}" placeholder="HFUN_XXXX">
+            </label>
+
+            <label>
+                Drone IP / host
+                <input type="text" id="wifiHostInput" value="{{ camera_settings.wifi_host }}" placeholder="192.168.1.1" required>
+            </label>
+
+            <label>
+                Viewer mode
+                <select id="viewerModeInput">
+                    <option value="proxy" {% if camera_settings.viewer_mode == 'proxy' %}selected{% endif %}>Proxy through this app</option>
+                    <option value="direct_mjpeg" {% if camera_settings.viewer_mode == 'direct_mjpeg' %}selected{% endif %}>Direct MJPEG image</option>
+                    <option value="direct_video" {% if camera_settings.viewer_mode == 'direct_video' %}selected{% endif %}>Direct browser video</option>
+                </select>
+            </label>
+
+            <label>
+                Stream URL
+                <input type="text" id="streamUrlInput" value="{{ camera_settings.stream_url }}" placeholder="rtsp://192.168.1.1:554/live/ch0" required>
+            </label>
+
+            <label>
+                Notes
+                <textarea id="notesInput" rows="4">{{ camera_settings.notes }}</textarea>
+            </label>
+
+            <div class="stack">
+                <span class="eyebrow">Quick presets</span>
+                <div class="button-row" id="presetRow">
+                    <button type="button" class="ghost-button" data-stream-template="rtsp://{host}:554/live/ch0">RTSP ch0</button>
+                    <button type="button" class="ghost-button" data-stream-template="rtsp://{host}:8554/live/ch0">RTSP 8554</button>
+                    <button type="button" class="ghost-button" data-stream-template="udp://@0.0.0.0:8080">UDP 8080</button>
+                    <button type="button" class="ghost-button" data-stream-template="http://{host}:8080/?action=stream">HTTP MJPEG</button>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" class="primary-button">Save settings</button>
+                <button type="button" id="probeButton" class="ghost-button">Probe target</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Status</p>
+                <h2>Diagnostics</h2>
+            </div>
+            <span class="chip" id="probeStatusChip">Idle</span>
+        </div>
+
+        <div class="info-stack">
+            <article class="info-card">
+                <span class="info-label">Open this on your phone</span>
+                <strong id="phoneUrlValue">Loading…</strong>
+                <p>In proxy mode, the computer running this app must be connected to the drone Wi-Fi and reachable from your phone.</p>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">OpenCV bridge</span>
+                <strong id="opencvValue">{{ 'Ready' if camera_status.opencv_available else 'Missing' }}</strong>
+                <p id="viewerHintText">{{ camera_status.viewer_hint }}</p>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Last probe</span>
+                <strong id="probeSummary">No probe run yet</strong>
+                <p id="probeDetail">Use Probe target to confirm whether the current host and port are reachable from this machine.</p>
+            </article>
+        </div>
+    </section>
+</section>
+
+<section class="panel panel--viewer">
+    <div class="panel-head">
+        <div>
+            <p class="eyebrow">Live Feed</p>
+            <h2>Viewer</h2>
+        </div>
+        <div class="button-row">
+            <button type="button" id="connectButton" class="primary-button">Connect feed</button>
+            <button type="button" id="disconnectButton" class="ghost-button">Stop feed</button>
+        </div>
+    </div>
+
+    <div class="notice">
+        Proxy mode is the recommended option for RTSP and UDP streams because mobile browsers usually cannot play those protocols directly.
+    </div>
+
+    <div class="viewer-shell">
+        <img id="proxyViewer" class="viewer-screen hidden" alt="Drone camera feed">
+        <video id="directViewer" class="viewer-screen hidden" playsinline controls autoplay muted></video>
+        <div id="viewerPlaceholder" class="viewer-placeholder">
+            <h3>Feed not connected</h3>
+            <p>Save the stream URL, tap Connect feed, then open this same page on your phone.</p>
+        </div>
+    </div>
+
+    <div class="status-row">
+        <span class="chip" id="connectionStateChip">Disconnected</span>
+        <span id="connectionDetail">{{ camera_status.viewer_hint }}</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const droneCameraState = {
+    settings: {{ camera_settings|tojson }},
+    status: {{ camera_status|tojson }},
+};
+
+const toast = document.getElementById('toast');
+const cameraSettingsForm = document.getElementById('cameraSettingsForm');
+const cameraNameInput = document.getElementById('cameraNameInput');
+const wifiSsidInput = document.getElementById('wifiSsidInput');
+const wifiHostInput = document.getElementById('wifiHostInput');
+const viewerModeInput = document.getElementById('viewerModeInput');
+const viewerModeChip = document.getElementById('viewerModeChip');
+const streamUrlInput = document.getElementById('streamUrlInput');
+const notesInput = document.getElementById('notesInput');
+const presetRow = document.getElementById('presetRow');
+const probeButton = document.getElementById('probeButton');
+const probeStatusChip = document.getElementById('probeStatusChip');
+const probeSummary = document.getElementById('probeSummary');
+const probeDetail = document.getElementById('probeDetail');
+const phoneUrlValue = document.getElementById('phoneUrlValue');
+const opencvValue = document.getElementById('opencvValue');
+const viewerHintText = document.getElementById('viewerHintText');
+const connectButton = document.getElementById('connectButton');
+const disconnectButton = document.getElementById('disconnectButton');
+const proxyViewer = document.getElementById('proxyViewer');
+const directViewer = document.getElementById('directViewer');
+const viewerPlaceholder = document.getElementById('viewerPlaceholder');
+const connectionStateChip = document.getElementById('connectionStateChip');
+const connectionDetail = document.getElementById('connectionDetail');
+
+let toastTimer = null;
+
+function showToast(message, tone = 'success') {
+    toast.textContent = message;
+    toast.dataset.tone = tone;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+async function json(url, options = {}) {
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+        },
+        ...options,
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json')
+        ? await response.json()
+        : { error: await response.text() };
+
+    if (!response.ok) {
+        throw new Error(payload.error || `Request failed with status ${response.status}`);
+    }
+
+    return payload;
+}
+
+function currentSettingsFromForm() {
+    return {
+        camera_name: cameraNameInput.value.trim(),
+        wifi_ssid: wifiSsidInput.value.trim(),
+        wifi_host: wifiHostInput.value.trim(),
+        viewer_mode: viewerModeInput.value,
+        stream_url: streamUrlInput.value.trim(),
+        notes: notesInput.value.trim(),
+    };
+}
+
+function renderStatus(status) {
+    droneCameraState.status = status;
+    viewerModeChip.textContent = status.settings.viewer_mode;
+    opencvValue.textContent = status.opencv_available ? 'Ready' : 'Missing';
+    viewerHintText.textContent = status.viewer_hint || '';
+    connectionDetail.textContent = status.last_error || status.viewer_hint || '';
+}
+
+function renderProbeResult(result) {
+    probeStatusChip.textContent = result.ok ? 'Reachable' : 'Check target';
+    probeSummary.textContent = `${(result.scheme || 'unknown').toUpperCase()}${result.host ? ` · ${result.host}` : ''}${result.port ? `:${result.port}` : ''}`;
+    probeDetail.textContent = `${result.detail} ${result.browser_support}`;
+}
+
+async function refreshStatus() {
+    renderStatus(await json('/api/status'));
+}
+
+async function saveSettings(showSavedToast = true) {
+    const response = await json('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    droneCameraState.settings = response.settings;
+    await refreshStatus();
+    if (showSavedToast) {
+        showToast('Camera settings saved.');
+    }
+    return response.settings;
+}
+
+function hideViewers() {
+    proxyViewer.classList.add('hidden');
+    proxyViewer.removeAttribute('src');
+    directViewer.pause();
+    directViewer.classList.add('hidden');
+    directViewer.removeAttribute('src');
+    viewerPlaceholder.classList.remove('hidden');
+    connectionStateChip.textContent = 'Disconnected';
+}
+
+function showViewer(mode, sourceUrl) {
+    viewerPlaceholder.classList.add('hidden');
+    connectionStateChip.textContent = 'Connected';
+
+    if (mode === 'direct_video') {
+        proxyViewer.classList.add('hidden');
+        proxyViewer.removeAttribute('src');
+        directViewer.classList.remove('hidden');
+        directViewer.src = sourceUrl;
+        const playPromise = directViewer.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+        connectionDetail.textContent = 'The browser is opening the camera feed directly.';
+        return;
+    }
+
+    directViewer.pause();
+    directViewer.classList.add('hidden');
+    directViewer.removeAttribute('src');
+    proxyViewer.classList.remove('hidden');
+    proxyViewer.src = sourceUrl;
+    connectionDetail.textContent = mode === 'proxy'
+        ? 'This app is proxying the stream into JPEG frames for your phone.'
+        : 'The browser is opening the MJPEG feed directly.';
+}
+
+cameraSettingsForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+        await saveSettings(true);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+presetRow.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-stream-template]');
+    if (!button) return;
+    const host = wifiHostInput.value.trim() || '192.168.1.1';
+    streamUrlInput.value = button.dataset.streamTemplate.replace('{host}', host);
+});
+
+probeButton.addEventListener('click', async () => {
+    probeStatusChip.textContent = 'Probing…';
+    try {
+        const result = await json('/api/probe', {
+            method: 'POST',
+            body: JSON.stringify(currentSettingsFromForm()),
+        });
+        renderProbeResult(result);
+        showToast(result.ok ? 'Probe completed.' : 'Probe returned a warning.', result.ok ? 'success' : 'error');
+    } catch (error) {
+        probeStatusChip.textContent = 'Probe failed';
+        showToast(error.message, 'error');
+    }
+});
+
+connectButton.addEventListener('click', async () => {
+    try {
+        const settings = await saveSettings(false);
+        hideViewers();
+        if (settings.viewer_mode === 'proxy') {
+            if (!droneCameraState.status.opencv_available) {
+                showToast('Install OpenCV first so the app can decode the stream.', 'error');
+                return;
+            }
+            showViewer('proxy', `/api/stream?ts=${Date.now()}`);
+            return;
+        }
+        if (settings.viewer_mode === 'direct_mjpeg') {
+            showViewer('direct_mjpeg', settings.stream_url);
+            return;
+        }
+        showViewer('direct_video', settings.stream_url);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+disconnectButton.addEventListener('click', async () => {
+    hideViewers();
+    try {
+        await json('/api/disconnect', { method: 'POST' });
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+phoneUrlValue.textContent = window.location.href;
+hideViewers();
+renderStatus(droneCameraState.status);
+</script>
+{% endblock %}

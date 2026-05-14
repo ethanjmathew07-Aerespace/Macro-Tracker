@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Altitude Control Simulator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="control-panel">
+        <div class="panel-intro">
+          <span class="eyebrow">Standalone Web Dashboard</span>
+          <h1>Altitude Control Simulator</h1>
+          <p>
+            Quaternion-based spacecraft and UAV stabilization with PID/LQR tuning,
+            actuator realism, sensor uncertainty, live animation, and exportable reports.
+          </p>
+        </div>
+
+        <form id="sim-form" class="control-form">
+          <section class="form-section">
+            <div class="section-title">Mission Setup</div>
+            <label>
+              Vehicle
+              <select id="vehicle" name="vehicle"></select>
+            </label>
+            <label>
+              Scenario
+              <select id="scenario" name="scenario"></select>
+            </label>
+            <label>
+              Controller
+              <select id="controller" name="controller">
+                <option value="both">Compare PID + LQR</option>
+                <option value="pid">PID only</option>
+                <option value="lqr">LQR only</option>
+              </select>
+            </label>
+            <div class="grid-two">
+              <label>
+                Duration (s)
+                <input id="duration" name="duration" type="number" min="1" step="0.1" value="15">
+              </label>
+              <label>
+                Timestep (s)
+                <input id="dt" name="dt" type="number" min="0.005" step="0.005" value="0.02">
+              </label>
+            </div>
+            <label class="toggle">
+              <input id="auto-tune" name="auto_tune" type="checkbox" checked>
+              <span>Auto-tune controller gains</span>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">Altitude Targets</div>
+            <div class="vector-grid">
+              <label>Initial Roll<input id="initial-roll" type="number" step="0.1"></label>
+              <label>Initial Pitch<input id="initial-pitch" type="number" step="0.1"></label>
+              <label>Initial Yaw<input id="initial-yaw" type="number" step="0.1"></label>
+            </div>
+            <div class="vector-grid">
+              <label>Target Roll<input id="target-roll" type="number" step="0.1"></label>
+              <label>Target Pitch<input id="target-pitch" type="number" step="0.1"></label>
+              <label>Target Yaw<input id="target-yaw" type="number" step="0.1"></label>
+            </div>
+            <div class="vector-grid">
+              <label>Rate Roll<input id="rate-roll" type="number" step="0.1"></label>
+              <label>Rate Pitch<input id="rate-pitch" type="number" step="0.1"></label>
+              <label>Rate Yaw<input id="rate-yaw" type="number" step="0.1"></label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">Disturbance + Uncertainty</div>
+            <div class="vector-grid">
+              <label>Disturbance Roll<input id="dist-roll" type="number" step="0.01"></label>
+              <label>Disturbance Pitch<input id="dist-pitch" type="number" step="0.01"></label>
+              <label>Disturbance Yaw<input id="dist-yaw" type="number" step="0.01"></label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Disturbance Start
+                <input id="dist-start" type="number" step="0.1" placeholder="2.0">
+              </label>
+              <label>
+                Disturbance End
+                <input id="dist-end" type="number" step="0.1" placeholder="5.0">
+              </label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Sensor Angle Noise (deg)
+                <input id="sensor-angle-noise" type="number" min="0" step="0.01">
+              </label>
+              <label>
+                Sensor Rate Noise (deg/s)
+                <input id="sensor-rate-noise" type="number" min="0" step="0.01">
+              </label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Inertia Uncertainty (%)
+                <input id="inertia-uncertainty" type="number" min="0" step="0.5" value="0">
+              </label>
+              <label>
+                Damping Uncertainty (%)
+                <input id="damping-uncertainty" type="number" min="0" step="0.5" value="0">
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-title">Realtime Controls</div>
+            <div class="grid-two">
+              <label>
+                Actuator Lag (s)
+                <input id="actuator-lag" type="number" min="0.01" step="0.01">
+              </label>
+              <label>
+                Random Seed
+                <input id="measurement-seed" type="number" min="0" step="1" value="7">
+              </label>
+            </div>
+          </section>
+
+          <div class="action-row">
+            <button id="run-btn" class="primary" type="submit">Run Simulation</button>
+            <button id="report-btn" class="secondary" type="button">Export Report</button>
+          </div>
+        </form>
+      </aside>
+
+      <main class="dashboard">
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Dashboard Overview</span>
+            <h2>Controls, animation, realism, and scorecards in one place</h2>
+            <p id="hero-copy">
+              Load a scenario, compare controllers, inspect the altitude motion in 3D, and save a report bundle.
+            </p>
+          </div>
+          <div class="hero-status">
+            <div class="status-chip" id="status-chip">Ready</div>
+            <p id="status-copy">Waiting for the first run.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <div class="panel score-panel">
+            <div class="panel-head">
+              <h3>Scorecards</h3>
+              <div id="focus-tabs" class="focus-tabs"></div>
+            </div>
+            <div id="scorecards" class="scorecards empty-state">
+              Run a simulation to compare controller performance.
+            </div>
+          </div>
+
+          <div class="panel comparison-panel">
+            <div class="panel-head">
+              <h3>Comparison Summary</h3>
+            </div>
+            <div id="comparison-summary" class="comparison-summary empty-state">
+              The winner summary will appear here after a PID/LQR comparison run.
+            </div>
+          </div>
+        </section>
+
+        <section class="panel animation-panel">
+          <div class="panel-head">
+            <h3>3D Altitude Animation</h3>
+            <span class="panel-tag">Live playback</span>
+          </div>
+          <div id="animation-grid" class="animation-grid"></div>
+        </section>
+
+        <section class="charts-grid">
+          <article class="panel chart-panel">
+            <div class="panel-head"><h3>Altitude Tracking</h3></div>
+            <canvas id="attitude-chart" width="720" height="260"></canvas>
+          </article>
+          <article class="panel chart-panel">
+            <div class="panel-head"><h3>Error Response</h3></div>
+            <canvas id="error-chart" width="720" height="260"></canvas>
+          </article>
+          <article class="panel chart-panel">
+            <div class="panel-head"><h3>Body Rates</h3></div>
+            <canvas id="rate-chart" width="720" height="260"></canvas>
+          </article>
+          <article class="panel chart-panel">
+            <div class="panel-head"><h3>Actuator Torque</h3></div>
+            <canvas id="torque-chart" width="720" height="260"></canvas>
+          </article>
+        </section>
+
+        <section class="dashboard-grid notes-grid">
+          <div class="panel">
+            <div class="panel-head"><h3>Controller Notes</h3></div>
+            <div id="controller-notes" class="notes-block empty-state">
+              Auto-tuning, actuator notes, and realism notes will appear here.
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>Report Output</h3></div>
+            <div id="report-output" class="notes-block empty-state">
+              Export a report to create a folder with CSV, plot, JSON, and text summary files.
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

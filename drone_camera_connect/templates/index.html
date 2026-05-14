@@ -1,0 +1,864 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Standalone Flight Deck</p>
+        <h1>{{ app_name }}</h1>
+        <p class="hero-text">A tighter control surface for your repurposed drone camera. Configure the feed here, keep the computer on the camera Wi-Fi, and use proxy mode when the browser cannot talk to the stream directly.</p>
+
+        <div class="hero-actions">
+            <button type="button" id="heroConnectButton" class="primary-button">Open live feed</button>
+            <button type="button" id="heroProbeButton" class="ghost-button">Run connection probe</button>
+        </div>
+    </div>
+
+    <aside class="hero-side">
+        <div class="metric-card">
+            <span class="metric-label">Local app URL</span>
+            <strong id="launchUrlPrimary">{{ access_urls[0] if access_urls else 'http://127.0.0.1:5601' }}</strong>
+            <p>Open the app on this Mac, keep the machine on the camera Wi-Fi, and use it as the primary viewer.</p>
+        </div>
+
+        <div class="metric-grid">
+            <article class="metric-card compact">
+                <span class="metric-label">Viewer mode</span>
+                <strong id="viewerModeChip">{{ camera_settings.get('viewer_mode', 'proxy') }}</strong>
+            </article>
+
+            <article class="metric-card compact">
+                <span class="metric-label">Stream scheme</span>
+                <strong id="streamSchemeValue">{{ camera_status.get('stream_scheme', 'rtsp') or 'rtsp' }}</strong>
+            </article>
+
+            <article class="metric-card compact">
+                <span class="metric-label">Proxy decoder</span>
+                <strong id="opencvValue">{{ 'Ready' if camera_status.get('opencv_available') else 'Missing' }}</strong>
+            </article>
+
+            <article class="metric-card compact">
+                <span class="metric-label">Recommended mode</span>
+                <strong id="recommendedModeValue">{{ camera_status.get('recommended_viewer_mode', 'proxy') }}</strong>
+            </article>
+        </div>
+    </aside>
+</section>
+
+<section class="dashboard-grid">
+    <section class="panel">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Camera Profile</p>
+                <h2>Control link</h2>
+            </div>
+            <span class="panel-badge">Standalone app</span>
+        </div>
+
+        <form id="settingsForm" class="form-grid">
+            <label>
+                Camera name
+                <input id="cameraNameInput" type="text" value="{{ camera_settings.get('camera_name', '') }}" required>
+            </label>
+
+            <div class="split-grid">
+                <label>
+                    Drone Wi-Fi SSID
+                    <input id="wifiSsidInput" type="text" value="{{ camera_settings.get('wifi_ssid', '') }}" placeholder="HFUN_XXXX">
+                </label>
+
+                <label>
+                    Camera IP / host
+                    <input id="wifiHostInput" type="text" value="{{ camera_settings.get('wifi_host', '') }}" placeholder="192.168.1.1" required>
+                </label>
+            </div>
+
+            <div class="split-grid">
+                <label>
+                    Viewer mode
+                    <select id="viewerModeInput">
+                        <option value="proxy" {% if camera_settings.get('viewer_mode') == 'proxy' %}selected{% endif %}>Proxy through this app</option>
+                        <option value="direct_mjpeg" {% if camera_settings.get('viewer_mode') == 'direct_mjpeg' %}selected{% endif %}>Direct MJPEG image</option>
+                        <option value="direct_video" {% if camera_settings.get('viewer_mode') == 'direct_video' %}selected{% endif %}>Direct browser video</option>
+                    </select>
+                </label>
+
+                <label>
+                    Stream URL
+                    <input id="streamUrlInput" type="text" value="{{ camera_settings.get('stream_url', '') }}" placeholder="rtsp://192.168.1.1:554/live/ch0" required>
+                </label>
+            </div>
+
+            <label>
+                Notes
+                <textarea id="notesInput" rows="4">{{ camera_settings.get('notes', '') }}</textarea>
+            </label>
+
+            <div class="stack">
+                <div class="stack-head">
+                    <span class="eyebrow">Fast templates</span>
+                    <span class="stack-note">Tap a candidate to fill both the URL and the best viewer mode.</span>
+                </div>
+                <div class="chip-grid" id="presetRow">
+                    <button type="button" class="ghost-button" data-stream-template="rtsp://{host}:554/live/ch0" data-viewer-mode="proxy">RTSP ch0</button>
+                    <button type="button" class="ghost-button" data-stream-template="rtsp://{host}:554/stream1" data-viewer-mode="proxy">RTSP stream1</button>
+                    <button type="button" class="ghost-button" data-stream-template="rtsp://{host}:8554/live/ch0" data-viewer-mode="proxy">RTSP 8554</button>
+                    <button type="button" class="ghost-button" data-stream-template="udp://@0.0.0.0:8080" data-viewer-mode="proxy">UDP 8080</button>
+                    <button type="button" class="ghost-button" data-stream-template="http://{host}:8080/?action=stream" data-viewer-mode="direct_mjpeg">HTTP MJPEG</button>
+                    <button type="button" class="ghost-button" data-stream-template="http://{host}:8080/live.m3u8" data-viewer-mode="direct_video">HTTP HLS</button>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" class="primary-button">Save settings</button>
+                <button type="button" id="probeButton" class="ghost-button">Probe target</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel panel-diagnostics">
+        <div class="panel-head">
+            <div>
+                <p class="eyebrow">Diagnostics</p>
+                <h2>Link health</h2>
+            </div>
+            <span class="chip" id="probeStatusChip">Idle</span>
+        </div>
+
+        <div class="diagnostic-stack">
+            <article class="info-card">
+                <span class="info-label">Connection summary</span>
+                <strong id="connectionSummary">{{ camera_status.get('connection_summary', camera_status.get('viewer_hint', 'Waiting for status')) }}</strong>
+                <p id="viewerHintText">{{ camera_status.get('viewer_hint', '') }}</p>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Local Access</span>
+                <strong>Use this Mac as the control and viewing station</strong>
+                <div id="launchUrlList" class="link-list"></div>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Last probe</span>
+                <strong id="probeSummary">No probe run yet</strong>
+                <p id="probeDetail">Run the probe to confirm the host and port are reachable from this computer before you troubleshoot codecs.</p>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">UDP Discovery</span>
+                <strong id="udpScanSummary">No UDP scan run yet</strong>
+                <p id="udpScanDetail">Listen on the common drone-camera ports to see whether the Mac is actually receiving video packets.</p>
+                <div class="button-row scan-actions">
+                    <button type="button" id="udpScanButton" class="ghost-button">Scan UDP ports</button>
+                    <button type="button" id="udpCaptureButton" class="ghost-button">Capture UDP traffic</button>
+                </div>
+                <div id="udpPortList" class="udp-port-list"></div>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Traffic Capture</span>
+                <strong id="trafficCaptureSummary">No traffic capture run yet</strong>
+                <p id="trafficCaptureDetail">Capture general traffic involving the drone host so we can spot hidden ports or protocols.</p>
+                <div class="button-row scan-actions">
+                    <button type="button" id="trafficCaptureButton" class="ghost-button">Capture drone traffic</button>
+                </div>
+                <div id="trafficHotPortList" class="traffic-port-list"></div>
+                <div id="trafficRawPreview" class="traffic-raw-preview"></div>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Network Discovery</span>
+                <strong id="networkDiscoverySummary">No network discovery run yet</strong>
+                <p id="networkDiscoveryDetail">Scan the current Wi-Fi traffic for likely private-network device hosts when the saved camera IP is not responding.</p>
+                <div class="button-row scan-actions">
+                    <button type="button" id="networkDiscoveryButton" class="ghost-button">Discover network devices</button>
+                </div>
+                <div id="networkHostList" class="network-host-list"></div>
+                <div id="networkRawPreview" class="traffic-raw-preview"></div>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Suggested stream targets</span>
+                <strong>Common endpoints for repurposed cameras</strong>
+                <div id="candidateList" class="candidate-list"></div>
+            </article>
+
+            <article class="info-card">
+                <span class="info-label">Active proxy target</span>
+                <strong id="activeStreamValue">{{ camera_status.get('active_stream_url', 'No active proxy stream') or 'No active proxy stream' }}</strong>
+                <p id="hostMatchValue">{{ 'Stream host matches the saved Wi-Fi host.' if camera_status.get('host_matches_stream', True) else 'Stream host differs from the saved Wi-Fi host.' }}</p>
+            </article>
+        </div>
+    </section>
+</section>
+
+<section class="panel viewer-panel">
+    <div class="panel-head">
+        <div>
+            <p class="eyebrow">Live Viewer</p>
+            <h2>Camera output</h2>
+        </div>
+        <div class="button-row">
+            <button type="button" id="connectButton" class="primary-button">Connect feed</button>
+            <button type="button" id="disconnectButton" class="ghost-button">Stop feed</button>
+        </div>
+    </div>
+
+    <div class="notice">
+        Proxy mode is the safe default for RTSP and UDP drone feeds because this Mac can decode them even when the browser cannot play them natively.
+    </div>
+
+    <div class="viewer-shell">
+        <div class="viewer-overlay">
+            <span class="signal-dot"></span>
+            <span id="connectionStateChip">Disconnected</span>
+        </div>
+        <img id="proxyViewer" class="viewer-screen hidden" alt="Drone camera feed">
+        <video id="directViewer" class="viewer-screen hidden" playsinline controls autoplay muted></video>
+        <div id="viewerPlaceholder" class="viewer-placeholder">
+            <h3>Feed not connected</h3>
+            <p>Save the profile, probe the target, then open the live feed once this Mac is attached to the drone camera network.</p>
+        </div>
+    </div>
+
+    <div class="status-row">
+        <span id="connectionDetail">{{ camera_status.get('viewer_hint', '') }}</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const appState = {
+    settings: {{ camera_settings|tojson }},
+    status: {{ camera_status|tojson }},
+    accessUrls: {{ access_urls|tojson }},
+};
+
+const toast = document.getElementById('toast');
+const settingsForm = document.getElementById('settingsForm');
+const cameraNameInput = document.getElementById('cameraNameInput');
+const wifiSsidInput = document.getElementById('wifiSsidInput');
+const wifiHostInput = document.getElementById('wifiHostInput');
+const viewerModeInput = document.getElementById('viewerModeInput');
+const viewerModeChip = document.getElementById('viewerModeChip');
+const streamSchemeValue = document.getElementById('streamSchemeValue');
+const recommendedModeValue = document.getElementById('recommendedModeValue');
+const streamUrlInput = document.getElementById('streamUrlInput');
+const notesInput = document.getElementById('notesInput');
+const presetRow = document.getElementById('presetRow');
+const probeButton = document.getElementById('probeButton');
+const heroProbeButton = document.getElementById('heroProbeButton');
+const heroConnectButton = document.getElementById('heroConnectButton');
+const probeStatusChip = document.getElementById('probeStatusChip');
+const probeSummary = document.getElementById('probeSummary');
+const probeDetail = document.getElementById('probeDetail');
+const launchUrlPrimary = document.getElementById('launchUrlPrimary');
+const launchUrlList = document.getElementById('launchUrlList');
+const udpScanButton = document.getElementById('udpScanButton');
+const udpCaptureButton = document.getElementById('udpCaptureButton');
+const udpScanSummary = document.getElementById('udpScanSummary');
+const udpScanDetail = document.getElementById('udpScanDetail');
+const udpPortList = document.getElementById('udpPortList');
+const trafficCaptureButton = document.getElementById('trafficCaptureButton');
+const trafficCaptureSummary = document.getElementById('trafficCaptureSummary');
+const trafficCaptureDetail = document.getElementById('trafficCaptureDetail');
+const trafficHotPortList = document.getElementById('trafficHotPortList');
+const trafficRawPreview = document.getElementById('trafficRawPreview');
+const networkDiscoveryButton = document.getElementById('networkDiscoveryButton');
+const networkDiscoverySummary = document.getElementById('networkDiscoverySummary');
+const networkDiscoveryDetail = document.getElementById('networkDiscoveryDetail');
+const networkHostList = document.getElementById('networkHostList');
+const networkRawPreview = document.getElementById('networkRawPreview');
+const opencvValue = document.getElementById('opencvValue');
+const viewerHintText = document.getElementById('viewerHintText');
+const connectionSummary = document.getElementById('connectionSummary');
+const candidateList = document.getElementById('candidateList');
+const activeStreamValue = document.getElementById('activeStreamValue');
+const hostMatchValue = document.getElementById('hostMatchValue');
+const connectButton = document.getElementById('connectButton');
+const disconnectButton = document.getElementById('disconnectButton');
+const proxyViewer = document.getElementById('proxyViewer');
+const directViewer = document.getElementById('directViewer');
+const viewerPlaceholder = document.getElementById('viewerPlaceholder');
+const connectionStateChip = document.getElementById('connectionStateChip');
+const connectionDetail = document.getElementById('connectionDetail');
+
+let toastTimer = null;
+
+function showToast(message, tone = 'success') {
+    toast.textContent = message;
+    toast.dataset.tone = tone;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+async function json(url, options = {}) {
+    const response = await fetch(url, {
+        headers: {
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+        },
+        ...options,
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json')
+        ? await response.json()
+        : { error: await response.text() };
+
+    if (!response.ok) {
+        throw new Error(payload.error || `Request failed with status ${response.status}`);
+    }
+
+    return payload;
+}
+
+function currentSettingsFromForm() {
+    return {
+        camera_name: cameraNameInput.value.trim(),
+        wifi_ssid: wifiSsidInput.value.trim(),
+        wifi_host: wifiHostInput.value.trim(),
+        viewer_mode: viewerModeInput.value,
+        stream_url: streamUrlInput.value.trim(),
+        notes: notesInput.value.trim(),
+    };
+}
+
+function renderAccessUrls(urls) {
+    const safeUrls = Array.isArray(urls) && urls.length ? urls : [window.location.href];
+    launchUrlPrimary.textContent = safeUrls[0];
+    launchUrlList.innerHTML = '';
+
+    const localUrl = safeUrls[0];
+    const link = document.createElement('a');
+    link.href = localUrl;
+    link.textContent = localUrl;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    launchUrlList.appendChild(link);
+}
+
+function applyCandidate(candidate) {
+    if (!candidate || !candidate.url) return;
+    streamUrlInput.value = candidate.url;
+    if (candidate.viewer_mode) {
+        viewerModeInput.value = candidate.viewer_mode;
+    }
+    viewerModeChip.textContent = viewerModeInput.value;
+}
+
+function replaceHostInStreamUrl(nextHost) {
+    const currentUrl = streamUrlInput.value.trim();
+    if (!currentUrl) {
+        return;
+    }
+    try {
+        const parsed = new URL(currentUrl);
+        parsed.hostname = nextHost;
+        streamUrlInput.value = parsed.toString();
+    } catch (error) {
+        if (currentUrl.startsWith('rtsp://') || currentUrl.startsWith('http://') || currentUrl.startsWith('https://')) {
+            const updated = currentUrl.replace(/^(rtsp|http|https):\/\/[^/:]+/, `$1://${nextHost}`);
+            streamUrlInput.value = updated;
+        }
+    }
+}
+
+function applyDiscoveredHost(host) {
+    if (!host) return;
+    wifiHostInput.value = host;
+    const currentUrl = streamUrlInput.value.trim();
+    if (currentUrl && !currentUrl.startsWith('udp://')) {
+        replaceHostInStreamUrl(host);
+    }
+}
+
+function renderCandidates(candidates = []) {
+    candidateList.innerHTML = '';
+    const safeCandidates = Array.isArray(candidates) ? candidates.slice(0, 8) : [];
+
+    safeCandidates.forEach((candidate) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'candidate-item';
+        button.innerHTML = `<strong>${candidate.label || 'Candidate'}</strong><span>${candidate.url || ''}</span><em>${candidate.viewer_mode_label || candidate.viewer_mode || ''}</em>`;
+        button.addEventListener('click', () => applyCandidate(candidate));
+        candidateList.appendChild(button);
+    });
+
+    if (!safeCandidates.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'No candidate targets available yet.';
+        candidateList.appendChild(empty);
+    }
+}
+
+function renderUdpObservation(result) {
+    udpPortList.innerHTML = '';
+
+    if (!result) {
+        udpScanSummary.textContent = 'No UDP scan run yet';
+        udpScanDetail.textContent = 'Listen on the common drone-camera ports to see whether the Mac is actually receiving video packets.';
+        return;
+    }
+
+    udpScanSummary.textContent = result.ok
+        ? `Packets detected on port ${result.active_port}`
+        : 'No UDP packets detected';
+    udpScanDetail.textContent = result.detail || 'UDP observation complete.';
+
+    const safePorts = Array.isArray(result.ports) ? result.ports : [];
+    safePorts.forEach((item) => {
+        const entry = document.createElement('div');
+        const tone = item.packet_count > 0 ? ' active' : '';
+        entry.className = `udp-port-item${tone}`;
+        const senderText = Array.isArray(item.senders) && item.senders.length
+            ? item.senders.join(', ')
+            : (item.error || 'No packets observed');
+        const formatHint = item.format_hint ? ` · ${item.format_hint}` : '';
+        entry.innerHTML = `
+            <strong>Port ${item.port}</strong>
+            <span>${item.packet_count || 0} packets · ${item.byte_count || 0} bytes${formatHint}</span>
+            <em>${senderText}</em>
+            ${item.sample_preview ? `<code>${item.sample_preview}</code>` : ''}
+        `;
+        udpPortList.appendChild(entry);
+    });
+
+    if (!safePorts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'No UDP listener data is available.';
+        udpPortList.appendChild(empty);
+    }
+}
+
+function renderTrafficCapture(result) {
+    trafficHotPortList.innerHTML = '';
+    trafficRawPreview.innerHTML = '';
+
+    if (!result) {
+        trafficCaptureSummary.textContent = 'No traffic capture run yet';
+        trafficCaptureDetail.textContent = 'Capture general traffic involving the drone host so we can spot hidden ports or protocols.';
+        return;
+    }
+
+    trafficCaptureSummary.textContent = result.ok
+        ? `Captured traffic for ${result.host}`
+        : 'No traffic clues captured';
+    trafficCaptureDetail.textContent = result.detail || 'Traffic capture complete.';
+
+    const hotPorts = Array.isArray(result.hot_ports) ? result.hot_ports : [];
+    hotPorts.forEach((item) => {
+        const entry = document.createElement('div');
+        entry.className = 'traffic-port-item';
+        entry.innerHTML = `
+            <strong>${(item.protocol || 'other').toUpperCase()} port ${item.port}</strong>
+            <span>${item.packet_count || 0} packets · ${item.direction || 'unknown direction'}</span>
+            <em>${item.sample_line || ''}</em>
+        `;
+        trafficHotPortList.appendChild(entry);
+    });
+
+    if (!hotPorts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = result.permission_required
+            ? 'Capture needs elevated packet-capture permissions.'
+            : 'No useful host-level traffic clues were captured.';
+        trafficHotPortList.appendChild(empty);
+    }
+
+    const rawPreview = Array.isArray(result.raw_preview) ? result.raw_preview : [];
+    if (rawPreview.length) {
+        const code = document.createElement('code');
+        code.textContent = rawPreview.join('\n');
+        trafficRawPreview.appendChild(code);
+    }
+}
+
+function renderNetworkDiscovery(result) {
+    networkHostList.innerHTML = '';
+    networkRawPreview.innerHTML = '';
+
+    if (!result) {
+        networkDiscoverySummary.textContent = 'No network discovery run yet';
+        networkDiscoveryDetail.textContent = 'Scan the current Wi-Fi traffic for likely private-network device hosts when the saved camera IP is not responding.';
+        return;
+    }
+
+    networkDiscoverySummary.textContent = result.ok
+        ? `Likely device host: ${result.suggested_wifi_host}`
+        : 'No likely private-network hosts found';
+    networkDiscoveryDetail.textContent = result.detail || 'Network discovery complete.';
+
+    const likelyHosts = Array.isArray(result.likely_hosts) ? result.likely_hosts : [];
+    likelyHosts.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'network-host-item';
+        const protocolText = Object.entries(item.protocol_counts || {})
+            .map(([protocol, count]) => `${protocol}:${count}`)
+            .join(', ');
+        button.innerHTML = `
+            <strong>${item.host}</strong>
+            <span>${item.line_count || 0} lines · src ${item.source_count || 0} · dst ${item.destination_count || 0}</span>
+            <em>${protocolText || 'No protocol summary'}</em>
+        `;
+        button.addEventListener('click', () => applyDiscoveredHost(item.host));
+        networkHostList.appendChild(button);
+    });
+
+    if (!likelyHosts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = result.permission_required
+            ? 'Discovery needs elevated packet-capture permissions.'
+            : 'No likely private-network hosts were discovered.';
+        networkHostList.appendChild(empty);
+    }
+
+    const rawPreview = Array.isArray(result.raw_preview) ? result.raw_preview : [];
+    if (rawPreview.length) {
+        const code = document.createElement('code');
+        code.textContent = rawPreview.join('\n');
+        networkRawPreview.appendChild(code);
+    }
+}
+
+function renderStatus(status) {
+    appState.status = status || {};
+    const settings = status.settings || appState.settings || {};
+
+    viewerModeChip.textContent = settings.viewer_mode || 'proxy';
+    streamSchemeValue.textContent = (status.stream_scheme || 'rtsp').toUpperCase();
+    opencvValue.textContent = status.opencv_available ? 'Ready' : 'Missing';
+    recommendedModeValue.textContent = status.recommended_viewer_mode || 'proxy';
+    viewerHintText.textContent = status.viewer_hint || '';
+    connectionSummary.textContent = status.connection_summary || status.viewer_hint || 'Waiting for status.';
+    connectionDetail.textContent = status.last_error || status.viewer_hint || '';
+    activeStreamValue.textContent = status.active_stream_url || 'No active proxy stream';
+    hostMatchValue.textContent = status.host_matches_stream === false
+        ? 'Stream host differs from the saved Wi-Fi host.'
+        : 'Stream host matches the saved Wi-Fi host.';
+
+    renderCandidates(status.stream_candidates || []);
+    renderUdpObservation(status.udp_scan_result || status.udp_capture_result || null);
+    renderTrafficCapture(status.traffic_capture_result || null);
+    renderNetworkDiscovery(status.network_discovery_result || null);
+}
+
+function renderProbeResult(result) {
+    probeStatusChip.textContent = result.ok ? 'Reachable' : 'Check target';
+    probeSummary.textContent = `${(result.scheme || 'unknown').toUpperCase()}${result.host ? ` · ${result.host}` : ''}${result.port ? `:${result.port}` : ''}`;
+    probeDetail.textContent = `${result.detail || ''} ${result.browser_support || ''}`.trim();
+    if (result.recommended_viewer_mode) {
+        recommendedModeValue.textContent = result.recommended_viewer_mode;
+    }
+    if (Array.isArray(result.candidates)) {
+        renderCandidates(result.candidates);
+    }
+    hostMatchValue.textContent = result.host_matches_stream === false
+        ? 'Stream host differs from the saved Wi-Fi host.'
+        : 'Stream host matches the saved Wi-Fi host.';
+}
+
+async function refreshStatus() {
+    renderStatus(await json('/api/status'));
+}
+
+async function applyUdpSuggestion(result) {
+    if (!result || !result.suggested_stream_url) {
+        return false;
+    }
+
+    const nextUrl = result.suggested_stream_url;
+    const needsSave = streamUrlInput.value.trim() !== nextUrl || viewerModeInput.value !== 'proxy';
+    streamUrlInput.value = nextUrl;
+    viewerModeInput.value = 'proxy';
+    viewerModeChip.textContent = 'proxy';
+
+    if (needsSave) {
+        await saveSettings(false);
+    } else {
+        await refreshStatus();
+    }
+
+    return true;
+}
+
+async function saveSettings(showSavedToast = true) {
+    const response = await json('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    appState.settings = response.settings;
+    await refreshStatus();
+    if (showSavedToast) {
+        showToast('Camera settings saved.');
+    }
+    return response.settings;
+}
+
+function hideViewers() {
+    proxyViewer.classList.add('hidden');
+    proxyViewer.removeAttribute('src');
+    directViewer.pause();
+    directViewer.classList.add('hidden');
+    directViewer.removeAttribute('src');
+    viewerPlaceholder.classList.remove('hidden');
+    connectionStateChip.textContent = 'Disconnected';
+}
+
+function showViewer(mode, sourceUrl) {
+    viewerPlaceholder.classList.add('hidden');
+    connectionStateChip.textContent = 'Connected';
+
+    if (mode === 'direct_video') {
+        proxyViewer.classList.add('hidden');
+        proxyViewer.removeAttribute('src');
+        directViewer.classList.remove('hidden');
+        directViewer.src = sourceUrl;
+        const playPromise = directViewer.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+        connectionDetail.textContent = 'The browser is opening the feed directly.';
+        return;
+    }
+
+    directViewer.pause();
+    directViewer.classList.add('hidden');
+    directViewer.removeAttribute('src');
+    proxyViewer.classList.remove('hidden');
+    proxyViewer.src = sourceUrl;
+    connectionDetail.textContent = mode === 'proxy'
+        ? 'This app is decoding the camera stream on this Mac and rendering it in the local viewer.'
+        : 'The browser is opening the MJPEG feed directly.';
+}
+
+async function runProbe() {
+    probeStatusChip.textContent = 'Probing...';
+    const result = await json('/api/probe', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    renderProbeResult(result);
+    showToast(result.ok ? 'Probe completed.' : 'Probe returned a warning.', result.ok ? 'success' : 'error');
+}
+
+async function runUdpScan(showResultToast = true) {
+    udpScanSummary.textContent = 'Scanning UDP ports...';
+    udpScanDetail.textContent = 'Listening on the common drone-camera ports for active packets.';
+    const result = await json('/api/udp-scan', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    renderUdpObservation(result);
+    const applied = await applyUdpSuggestion(result);
+    if (!applied) {
+        await refreshStatus();
+    }
+    if (showResultToast) {
+        showToast(
+            result.ok ? `Detected UDP traffic on port ${result.active_port}.` : 'No UDP packets detected yet.',
+            result.ok ? 'success' : 'error'
+        );
+    }
+    return result;
+}
+
+async function runUdpCapture(showResultToast = true) {
+    udpScanSummary.textContent = 'Capturing UDP traffic...';
+    udpScanDetail.textContent = 'Listening longer so we can catch delayed packets from the drone camera.';
+    const result = await json('/api/udp-capture', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    renderUdpObservation(result);
+    const applied = await applyUdpSuggestion(result);
+    if (!applied) {
+        await refreshStatus();
+    }
+    if (showResultToast) {
+        showToast(
+            result.ok ? `Captured UDP packets on port ${result.active_port}.` : 'No UDP packets were captured.',
+            result.ok ? 'success' : 'error'
+        );
+    }
+    return result;
+}
+
+async function runTrafficCapture(showResultToast = true) {
+    trafficCaptureSummary.textContent = 'Capturing drone traffic...';
+    trafficCaptureDetail.textContent = 'Watching all traffic involving the drone host to discover hidden ports or protocols.';
+    const result = await json('/api/traffic-capture', {
+        method: 'POST',
+        body: JSON.stringify(currentSettingsFromForm()),
+    });
+    renderTrafficCapture(result);
+    const applied = await applyUdpSuggestion(result);
+    if (!applied) {
+        await refreshStatus();
+    }
+    if (showResultToast) {
+        showToast(
+            result.ok ? 'Traffic capture completed.' : 'Traffic capture found no usable clues.',
+            result.ok ? 'success' : 'error'
+        );
+    }
+    return result;
+}
+
+async function runNetworkDiscovery(showResultToast = true) {
+    networkDiscoverySummary.textContent = 'Discovering network devices...';
+    networkDiscoveryDetail.textContent = 'Watching private-network traffic on the current Wi-Fi connection to discover likely drone hosts.';
+    const result = await json('/api/network-discovery', {
+        method: 'POST',
+    });
+    renderNetworkDiscovery(result);
+    if (result && result.suggested_wifi_host) {
+        applyDiscoveredHost(result.suggested_wifi_host);
+        await refreshStatus();
+    } else {
+        await refreshStatus();
+    }
+    if (showResultToast) {
+        showToast(
+            result.ok ? `Found likely host ${result.suggested_wifi_host}.` : 'No likely private-network hosts found.',
+            result.ok ? 'success' : 'error'
+        );
+    }
+    return result;
+}
+
+async function connectFeed() {
+    let settings = await saveSettings(false);
+    hideViewers();
+
+    if (settings.viewer_mode === 'proxy') {
+        if (!appState.status.opencv_available) {
+            showToast('Install OpenCV first so the app can decode the stream.', 'error');
+            return;
+        }
+        if ((settings.stream_url || '').startsWith('udp://')) {
+            await runUdpScan(false);
+            settings = currentSettingsFromForm();
+        }
+        showViewer('proxy', `/api/stream?ts=${Date.now()}`);
+        await refreshStatus();
+        return;
+    }
+
+    if (settings.viewer_mode === 'direct_mjpeg') {
+        showViewer('direct_mjpeg', settings.stream_url);
+        await refreshStatus();
+        return;
+    }
+
+    showViewer('direct_video', settings.stream_url);
+    await refreshStatus();
+}
+
+settingsForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+        await saveSettings(true);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+presetRow.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-stream-template]');
+    if (!button) return;
+    const host = wifiHostInput.value.trim() || '192.168.1.1';
+    streamUrlInput.value = button.dataset.streamTemplate.replace('{host}', host);
+    if (button.dataset.viewerMode) {
+        viewerModeInput.value = button.dataset.viewerMode;
+        viewerModeChip.textContent = button.dataset.viewerMode;
+    }
+});
+
+[probeButton, heroProbeButton].forEach((button) => {
+    button.addEventListener('click', async () => {
+        try {
+            await runProbe();
+        } catch (error) {
+            probeStatusChip.textContent = 'Probe failed';
+            showToast(error.message, 'error');
+        }
+    });
+});
+
+udpScanButton.addEventListener('click', async () => {
+    try {
+        await saveSettings(false);
+        await runUdpScan(true);
+    } catch (error) {
+        udpScanSummary.textContent = 'UDP scan failed';
+        showToast(error.message, 'error');
+    }
+});
+
+udpCaptureButton.addEventListener('click', async () => {
+    try {
+        await saveSettings(false);
+        await runUdpCapture(true);
+    } catch (error) {
+        udpScanSummary.textContent = 'UDP capture failed';
+        showToast(error.message, 'error');
+    }
+});
+
+trafficCaptureButton.addEventListener('click', async () => {
+    try {
+        await saveSettings(false);
+        await runTrafficCapture(true);
+    } catch (error) {
+        trafficCaptureSummary.textContent = 'Traffic capture failed';
+        showToast(error.message, 'error');
+    }
+});
+
+networkDiscoveryButton.addEventListener('click', async () => {
+    try {
+        await saveSettings(false);
+        await runNetworkDiscovery(true);
+    } catch (error) {
+        networkDiscoverySummary.textContent = 'Network discovery failed';
+        showToast(error.message, 'error');
+    }
+});
+
+[connectButton, heroConnectButton].forEach((button) => {
+    button.addEventListener('click', async () => {
+        try {
+            await connectFeed();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    });
+});
+
+disconnectButton.addEventListener('click', async () => {
+    hideViewers();
+    try {
+        await json('/api/disconnect', { method: 'POST' });
+        await refreshStatus();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+viewerModeInput.addEventListener('change', () => {
+    viewerModeChip.textContent = viewerModeInput.value;
+});
+
+renderAccessUrls(appState.accessUrls);
+hideViewers();
+renderStatus(appState.status);
+</script>
+{% endblock %}

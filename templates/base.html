@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11161b">
+    <title>{{ page_title }} | Macro Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="page-{{ active_page }}">
+    <div class="app-shell">
+        <div class="screen-shell" role="application" aria-label="Macro Tracker">
+            <header class="topbar">
+                <div class="topbar-copy">
+                    <p class="page-kicker">{{ page_title }}</p>
+                    <h1 class="page-title">{% block page_title_text %}{{ page_title }}{% endblock %}</h1>
+                </div>
+                <div class="topbar-badge">{{ current_date if current_date is defined else '' }}</div>
+            </header>
+
+            <main class="screen-body">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <nav class="mobile-dock" aria-label="Mobile navigation">
+        <a href="{{ url_for('index') }}" class="mobile-dock__link {% if active_page == 'dashboard' %}is-active{% endif %}">
+            <span class="mobile-dock__icon">◔</span>
+            <span>Today</span>
+        </a>
+        <a href="{{ url_for('library') }}" class="mobile-dock__link {% if active_page == 'library' %}is-active{% endif %}">
+            <span class="mobile-dock__icon">▣</span>
+            <span>Library</span>
+        </a>
+        <a href="{{ url_for('assistant') }}" class="mobile-dock__link mobile-dock__link--primary {% if active_page == 'assistant' %}is-active{% endif %}">
+            <span class="mobile-dock__icon">＋</span>
+            <span>Log</span>
+        </a>
+        <a href="{{ url_for('fast_food') }}" class="mobile-dock__link {% if active_page == 'fast_food' %}is-active{% endif %}">
+            <span class="mobile-dock__icon">◫</span>
+            <span>Fast Food</span>
+        </a>
+        <a href="{{ url_for('settings') }}" class="mobile-dock__link {% if active_page == 'settings' %}is-active{% endif %}">
+            <span class="mobile-dock__icon">⚙</span>
+            <span>Goals</span>
+        </a>
+    </nav>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
