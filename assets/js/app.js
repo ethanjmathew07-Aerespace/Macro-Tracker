@@ -23,11 +23,12 @@
     g: "g", gram: "g", grams: "g", kg: "kg", oz: "oz", ounce: "oz", ounces: "oz", lb: "lb", lbs: "lb", pound: "lb", pounds: "lb",
     cup: "cup", cups: "cup", tbsp: "tbsp", tablespoon: "tbsp", tablespoons: "tbsp", tsp: "tsp", teaspoon: "tsp", teaspoons: "tsp",
     slice: "slice", slices: "slice", piece: "piece", pieces: "piece", serving: "serving", servings: "serving", banana: "banana", bananas: "banana",
-    apple: "apple", apples: "apple", egg: "egg", eggs: "egg", bar: "bar", bars: "bar", potato: "potato", potatoes: "potato", avocado: "avocado", avocados: "avocado"
+    apple: "apple", apples: "apple", egg: "egg", eggs: "egg", bar: "bar", bars: "bar", potato: "potato", potatoes: "potato", avocado: "avocado", avocados: "avocado",
+    scoop: "scoop", scoops: "scoop", bottle: "bottle", bottles: "bottle", container: "container", containers: "container", bowl: "bowl", bowls: "bowl"
   };
 
   const CALORIE_REGEX = /(\d+(?:\.\d+)?)\s*(?:k?cal|calories?|cals?)\b/i;
-  const AMOUNT_REGEX = /(\d+(?:\.\d+)?)\s*(g|grams?|kg|oz|ounces?|lbs?|pounds?|cups?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|bananas?|apples?|eggs?|bars?|potatoes?|avocados?)\b/i;
+  const AMOUNT_REGEX = /(\d+(?:\.\d+)?)\s*(g|grams?|kg|oz|ounces?|lbs?|pounds?|cups?|tbsp|tablespoons?|tsp|teaspoons?|slices?|pieces?|servings?|bananas?|apples?|eggs?|bars?|potatoes?|avocados?|scoops?|bottles?|containers?|bowls?)\b/i;
 
   const defaultState = () => ({
     version: 1,
@@ -50,6 +51,7 @@
   let activeRestaurant = window.FAST_FOOD_RESTAURANTS?.[0]?.slug || "";
   let currentEstimate = null;
   let currentPhotoFile = null;
+  let currentLibraryEdit = null;
   let toastTimer = null;
 
   const els = {
@@ -57,11 +59,16 @@
     headerDateLabel: document.getElementById("headerDateLabel"),
     selectedDate: document.getElementById("selectedDate"),
     caloriesConsumedValue: document.getElementById("caloriesConsumedValue"),
+    ringProteinValue: document.getElementById("ringProteinValue"),
+    ringFatValue: document.getElementById("ringFatValue"),
+    ringCarbsValue: document.getElementById("ringCarbsValue"),
     caloriesGoalValue: document.getElementById("caloriesGoalValue"),
     calorieRing: document.getElementById("calorieRing"),
     dailyDeficitValue: document.getElementById("dailyDeficitValue"),
     dailyBurnValue: document.getElementById("dailyBurnValue"),
     remainingCaloriesValue: document.getElementById("remainingCaloriesValue"),
+    dashboardBurnInput: document.getElementById("dashboardBurnInput"),
+    saveDashboardBurnButton: document.getElementById("saveDashboardBurnButton"),
     proteinValue: document.getElementById("proteinValue"),
     fatValue: document.getElementById("fatValue"),
     carbsValue: document.getElementById("carbsValue"),
@@ -78,13 +85,30 @@
     weeklyDifferenceValue: document.getElementById("weeklyDifferenceValue"),
     foodLogHeading: document.getElementById("foodLogHeading"),
     foodLogList: document.getElementById("foodLogList"),
+    librarySearchInput: document.getElementById("librarySearchInput"),
+    librarySearchStatus: document.getElementById("librarySearchStatus"),
     libraryItemsList: document.getElementById("libraryItemsList"),
     savedMealsList: document.getElementById("savedMealsList"),
+    libraryEditorPanel: document.getElementById("libraryEditorPanel"),
+    libraryEditorHeading: document.getElementById("libraryEditorHeading"),
+    libraryEditorType: document.getElementById("libraryEditorType"),
+    libraryEditorName: document.getElementById("libraryEditorName"),
+    libraryEditorBrand: document.getElementById("libraryEditorBrand"),
+    libraryEditorAmount: document.getElementById("libraryEditorAmount"),
+    libraryEditorUnit: document.getElementById("libraryEditorUnit"),
+    libraryEditorCalories: document.getElementById("libraryEditorCalories"),
+    libraryEditorProtein: document.getElementById("libraryEditorProtein"),
+    libraryEditorCarbs: document.getElementById("libraryEditorCarbs"),
+    libraryEditorFat: document.getElementById("libraryEditorFat"),
+    libraryEditorNotes: document.getElementById("libraryEditorNotes"),
+    saveLibraryEditButton: document.getElementById("saveLibraryEditButton"),
+    cancelLibraryEditButton: document.getElementById("cancelLibraryEditButton"),
     restaurantTabs: document.getElementById("restaurantTabs"),
     fastFoodSearchInput: document.getElementById("fastFoodSearchInput"),
     fastFoodServingInput: document.getElementById("fastFoodServingInput"),
     fastFoodItemsList: document.getElementById("fastFoodItemsList"),
     describeInput: document.getElementById("describeInput"),
+    assistantConversation: document.getElementById("assistantConversation"),
     knownCaloriesInput: document.getElementById("knownCaloriesInput"),
     estimateFoodButton: document.getElementById("estimateFoodButton"),
     takePhotoButton: document.getElementById("takePhotoButton"),
@@ -150,6 +174,8 @@
     });
 
     els.fastFoodSearchInput.addEventListener("input", renderFastFood);
+    els.librarySearchInput.addEventListener("input", renderLibrary);
+    els.saveDashboardBurnButton.addEventListener("click", handleSaveDashboardBurn);
     els.estimateFoodButton.addEventListener("click", handleEstimateText);
     els.takePhotoButton.addEventListener("click", () => els.cameraCaptureInput.click());
     els.choosePhotoButton.addEventListener("click", () => els.photoPickerInput.click());
@@ -162,6 +188,8 @@
     els.archiveEstimateItemButton.addEventListener("click", handleArchiveEstimateItem);
     els.saveGoalsButton.addEventListener("click", handleSaveGoals);
     els.exportStateButton.addEventListener("click", handleExportBackup);
+    els.saveLibraryEditButton.addEventListener("click", handleSaveLibraryEdit);
+    els.cancelLibraryEditButton.addEventListener("click", closeLibraryEditor);
 
     els.fastFoodItemsList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-fast-food-id]");
@@ -260,13 +288,18 @@
     const settings = state.settings;
     const calorieProgress = clamp(day.calories / Math.max(settings.dailyCalories, 1), 0, 1.25);
     const proteinProgress = clamp(day.protein_g / Math.max(settings.dailyProtein, 1), 0, 1.25);
-    const deficitProgress = clamp(day.deficit / Math.max(settings.defaultBurned, 1), 0, 1.25);
+    const fatProgress = clamp(day.fat_g / Math.max(settings.dailyFat, 1), 0, 1.25);
+    const carbsProgress = clamp(day.carbs_g / Math.max(settings.dailyCarbs, 1), 0, 1.25);
 
     els.caloriesConsumedValue.textContent = formatNumber(day.calories);
-    els.caloriesGoalValue.textContent = `of ${formatNumber(settings.dailyCalories)} kcal`;
+    els.ringProteinValue.textContent = formatNumber(day.protein_g);
+    els.ringFatValue.textContent = formatNumber(day.fat_g);
+    els.ringCarbsValue.textContent = formatNumber(day.carbs_g);
+    els.caloriesGoalValue.textContent = `${formatNumber(settings.dailyCalories)} kcal goal`;
     els.dailyDeficitValue.textContent = `${signedNumber(day.deficit)} kcal`;
     els.dailyBurnValue.textContent = `${formatNumber(day.burned)} kcal`;
     els.remainingCaloriesValue.textContent = `${formatNumber(settings.dailyCalories - day.calories)} kcal`;
+    els.dashboardBurnInput.value = formatNumber(day.burned);
     els.proteinValue.textContent = `${formatNumber(day.protein_g)} g`;
     els.fatValue.textContent = `${formatNumber(day.fat_g)} g`;
     els.carbsValue.textContent = `${formatNumber(day.carbs_g)} g`;
@@ -274,11 +307,9 @@
     els.fatGoalValue.textContent = `Goal: ${formatNumber(settings.dailyFat)} g`;
     els.carbsGoalValue.textContent = `Goal: ${formatNumber(settings.dailyCarbs)} g`;
     els.proteinTrack.style.width = `${Math.min(100, proteinProgress * 100)}%`;
-    els.fatTrack.style.width = `${Math.min(100, clamp(day.fat_g / Math.max(settings.dailyFat, 1), 0, 1.25) * 100)}%`;
-    els.carbsTrack.style.width = `${Math.min(100, clamp(day.carbs_g / Math.max(settings.dailyCarbs, 1), 0, 1.25) * 100)}%`;
-    els.calorieRing.style.setProperty("--calorie-progress", `${calorieProgress}turn`);
-    els.calorieRing.style.setProperty("--protein-progress", `${proteinProgress}turn`);
-    els.calorieRing.style.setProperty("--deficit-progress", `${Math.max(0.08, Math.abs(deficitProgress))}turn`);
+    els.fatTrack.style.width = `${Math.min(100, fatProgress * 100)}%`;
+    els.carbsTrack.style.width = `${Math.min(100, carbsProgress * 100)}%`;
+    renderMacroRing(calorieProgress, proteinProgress, fatProgress, carbsProgress);
 
     renderWeekly(day);
     renderFoodLog(day.entries);
@@ -323,16 +354,36 @@
   }
 
   function renderLibrary() {
+    const search = (els.librarySearchInput.value || "").trim().toLowerCase();
+    els.libraryEditorPanel.classList.toggle("editor-panel--hidden", !currentLibraryEdit);
+
+    const libraryItems = state.libraryItems.filter((item) => matchesLibrarySearch(item, search));
+    const savedMeals = state.savedMeals.filter((meal) => matchesLibrarySearch(meal, search));
+    const totalVisible = libraryItems.length + savedMeals.length;
+    const totalItems = state.libraryItems.length + state.savedMeals.length;
+
+    els.librarySearchStatus.textContent = search
+      ? `${totalVisible} result${totalVisible === 1 ? "" : "s"} for "${els.librarySearchInput.value.trim()}".`
+      : "Showing everything in your library.";
+
     if (!state.libraryItems.length) {
       els.libraryItemsList.innerHTML = emptyState("No archived items yet", "Scan a nutrition label or save a grocery item and it will live here.");
+    } else if (!libraryItems.length) {
+      els.libraryItemsList.innerHTML = emptyState("No archived item matches", "Try a different search.");
     } else {
-      els.libraryItemsList.innerHTML = state.libraryItems.map((item) => foodItemTemplate(item, false, "library")).join("");
+      els.libraryItemsList.innerHTML = libraryItems.map((item) => foodItemTemplate(item, false, "library")).join("");
     }
 
     if (!state.savedMeals.length) {
       els.savedMealsList.innerHTML = emptyState("No saved meals yet", "Save a reusable meal from the Add Food screen.");
+    } else if (!savedMeals.length) {
+      els.savedMealsList.innerHTML = emptyState("No saved meal matches", "Try a different search.");
     } else {
-      els.savedMealsList.innerHTML = state.savedMeals.map((meal) => foodItemTemplate(meal, false, "saved")).join("");
+      els.savedMealsList.innerHTML = savedMeals.map((meal) => foodItemTemplate(meal, false, "saved")).join("");
+    }
+
+    if (!totalItems) {
+      els.librarySearchStatus.textContent = "Your library is empty.";
     }
   }
 
@@ -401,9 +452,18 @@
       showToast("Describe the food first.", true);
       return;
     }
+    appendChatMessage("user", query);
     const estimate = estimateFromText(query, els.knownCaloriesInput.value);
     populateEstimateEditor(estimate);
+    appendChatMessage("assistant", estimate.assistant_message || estimate.notes || "Estimate ready.");
     showToast("Estimate ready.");
+  }
+
+  function handleSaveDashboardBurn() {
+    state.burned[state.selectedDate] = positiveNumber(els.dashboardBurnInput.value, state.settings.defaultBurned);
+    persist();
+    renderAll();
+    showToast("Daily calories burned updated.");
   }
 
   async function handleScanLabel() {
@@ -425,6 +485,8 @@
       const estimate = parseNutritionLabelText(text, els.scanNameInput.value, els.scanBrandInput.value);
       estimate.ocrText = text;
       populateEstimateEditor(estimate);
+      appendChatMessage("user", `Scan label${els.scanNameInput.value ? ` for ${els.scanNameInput.value}` : ""}.`);
+      appendChatMessage("assistant", estimate.assistant_message || estimate.notes || "Label scanned.");
       showToast("Label scanned.");
     } catch (error) {
       showToast(error?.message || "Label scan failed.", true);
@@ -531,6 +593,12 @@
   }
 
   function handleListActions(event, type) {
+    const editButton = event.target.closest("[data-edit-item]");
+    if (editButton) {
+      openLibraryEditor(type, editButton.dataset.editItem);
+      return;
+    }
+
     const logButton = event.target.closest("[data-log-item]");
     if (logButton) {
       const list = type === "library" ? state.libraryItems : state.savedMeals;
@@ -551,6 +619,58 @@
     persist();
     renderLibrary();
     showToast("Removed.");
+  }
+
+  function openLibraryEditor(type, id) {
+    const list = type === "library" ? state.libraryItems : state.savedMeals;
+    const item = list.find((entry) => entry.id === id);
+    if (!item) return;
+
+    currentLibraryEdit = { type, id };
+    els.libraryEditorHeading.textContent = type === "library" ? "Edit archived item" : "Edit saved meal";
+    els.libraryEditorType.textContent = type === "library" ? "Archived item" : "Saved meal";
+    els.libraryEditorName.value = item.name || "";
+    els.libraryEditorBrand.value = item.brand || "";
+    els.libraryEditorAmount.value = positiveNumber(item.amount || item.serving_amount, 1);
+    els.libraryEditorUnit.value = item.unit || item.serving_unit || "serving";
+    els.libraryEditorCalories.value = numberOrZero(item.calories);
+    els.libraryEditorProtein.value = numberOrZero(item.protein_g);
+    els.libraryEditorCarbs.value = numberOrZero(item.carbs_g);
+    els.libraryEditorFat.value = numberOrZero(item.fat_g);
+    els.libraryEditorNotes.value = item.notes || "";
+    renderLibrary();
+    els.libraryEditorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function closeLibraryEditor() {
+    currentLibraryEdit = null;
+    renderLibrary();
+  }
+
+  function handleSaveLibraryEdit() {
+    if (!currentLibraryEdit) return;
+    const editType = currentLibraryEdit.type;
+    const listKey = editType === "library" ? "libraryItems" : "savedMeals";
+    const list = state[listKey];
+    const item = list.find((entry) => entry.id === currentLibraryEdit.id);
+    if (!item) return;
+
+    item.name = (els.libraryEditorName.value || "").trim();
+    item.brand = (els.libraryEditorBrand.value || "").trim();
+    item.amount = positiveNumber(els.libraryEditorAmount.value, 1);
+    item.serving_amount = item.amount;
+    item.unit = (els.libraryEditorUnit.value || "serving").trim();
+    item.serving_unit = item.unit;
+    item.calories = round(numberOrZero(els.libraryEditorCalories.value));
+    item.protein_g = round(numberOrZero(els.libraryEditorProtein.value));
+    item.carbs_g = round(numberOrZero(els.libraryEditorCarbs.value));
+    item.fat_g = round(numberOrZero(els.libraryEditorFat.value));
+    item.notes = (els.libraryEditorNotes.value || "").trim();
+
+    persist();
+    closeLibraryEditor();
+    renderAll();
+    showToast(editType === "library" ? "Archived item updated." : "Saved meal updated.");
   }
 
   function addEntry(entry) {
@@ -615,6 +735,44 @@
     return round(numberOrZero(state.burned[date], state.settings.defaultBurned));
   }
 
+  function renderMacroRing(calories, protein, fat, carbs) {
+    const segments = [
+      ["var(--gold)", calories],
+      ["var(--pink)", protein],
+      ["var(--mint)", fat],
+      ["var(--blue)", carbs]
+    ];
+    let start = 0;
+    const parts = [];
+    segments.forEach(([color, progress]) => {
+      const end = start + 90;
+      const filled = start + Math.min(1, progress) * 90;
+      parts.push(`${color} ${start}deg ${filled}deg`);
+      if (filled < end) {
+        parts.push(`rgba(255,255,255,0.08) ${filled}deg ${end}deg`);
+      }
+      start = end;
+    });
+    els.calorieRing.style.background = `radial-gradient(circle at center, #050505 53%, transparent 54%), conic-gradient(${parts.join(", ")})`;
+  }
+
+  function matchesLibrarySearch(item, search) {
+    if (!search) return true;
+    const haystack = [
+      item.name,
+      item.brand,
+      item.notes,
+      item.source,
+      item.unit,
+      item.serving_unit,
+      item.calories,
+      item.protein_g,
+      item.carbs_g,
+      item.fat_g
+    ].join(" ").toLowerCase();
+    return haystack.includes(search);
+  }
+
   function foodItemTemplate(item, allowDelete, mode = "entry") {
     const title = `${item.brand ? `${item.brand} · ` : ""}${item.name}`;
     const noteLine = [item.notes, item.unit ? `${formatNumber(item.amount || 1)} ${item.unit}` : ""].filter(Boolean).join(" · ");
@@ -623,6 +781,7 @@
       : `
         <div class="inline-row">
           <button class="action-button" type="button" data-log-item="${item.id}">Log</button>
+          <button class="ghost-button" type="button" data-edit-item="${item.id}">Edit</button>
           <button class="ghost-button" type="button" data-delete-item="${item.id}">Delete</button>
         </div>
       `;
@@ -665,6 +824,15 @@
     els.editorNotes.value = estimate.notes || "";
   }
 
+  function appendChatMessage(role, message) {
+    if (!els.assistantConversation) return;
+    const bubble = document.createElement("article");
+    bubble.className = `chat-bubble chat-bubble--${role}`;
+    bubble.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    els.assistantConversation.appendChild(bubble);
+    els.assistantConversation.scrollTop = els.assistantConversation.scrollHeight;
+  }
+
   function readEstimateEditor() {
     return {
       name: (els.editorName.value || "").trim(),
@@ -683,10 +851,7 @@
   function estimateFromText(query, knownCaloriesValue) {
     const lowered = query.toLowerCase();
     const explicitCalories = numberOrNull(knownCaloriesValue) ?? extractNumber(lowered, CALORIE_REGEX);
-    const amountMatch = lowered.match(AMOUNT_REGEX);
-    const amount = amountMatch ? Number(amountMatch[1]) : 1;
-    const unit = amountMatch ? (UNIT_ALIASES[amountMatch[2]] || "serving") : "serving";
-    const reference = FOOD_REFERENCES.find((item) => item.aliases.some((alias) => lowered.includes(alias)));
+    const matches = matchFoodReferences(lowered);
     const cleanName = query
       .replace(CALORIE_REGEX, "")
       .replace(AMOUNT_REGEX, "")
@@ -694,26 +859,34 @@
       .trim()
       .replace(/^[,.-]+|[,.-]+$/g, "");
 
-    if (!reference) {
+    if (!matches.length) {
       return {
         name: cleanName || "Custom food",
-        serving_amount: amount,
-        serving_unit: unit,
+        serving_amount: 1,
+        serving_unit: "meal",
         calories: round(explicitCalories || 0),
         protein_g: 0,
         carbs_g: 0,
         fat_g: 0,
         notes: "No strong food match yet. Edit the values before saving if needed.",
+        assistant_message: "I could not confidently match that meal to known foods yet. Add rough portions or calories for a better estimate.",
         source: "assistant_text"
       };
     }
 
-    const grams = gramsFor(reference, amount, unit);
-    let calories = grams * reference.caloriesPerGram;
-    let protein = grams * reference.proteinPerGram;
-    let carbs = grams * reference.carbsPerGram;
-    let fat = grams * reference.fatPerGram;
-    let notes = `Estimated from ${amount} ${unit} of ${reference.name.toLowerCase()}.`;
+    let calories = 0;
+    let protein = 0;
+    let carbs = 0;
+    let fat = 0;
+    const notes = [];
+    matches.forEach(({ reference, amount, unit }) => {
+      const grams = gramsFor(reference, amount, unit);
+      calories += grams * reference.caloriesPerGram;
+      protein += grams * reference.proteinPerGram;
+      carbs += grams * reference.carbsPerGram;
+      fat += grams * reference.fatPerGram;
+      notes.push(`${formatNumber(amount)} ${unit} ${reference.name.toLowerCase()}`);
+    });
 
     if (explicitCalories && calories > 0) {
       const scale = explicitCalories / calories;
@@ -721,30 +894,37 @@
       protein *= scale;
       carbs *= scale;
       fat *= scale;
-      notes = `Matched ${reference.name.toLowerCase()} and scaled macros to your provided calories.`;
     }
 
     return {
-      name: reference.name,
-      serving_amount: amount,
-      serving_unit: unit,
+      name: cleanName || matches.map((match) => match.reference.name).join(" + "),
+      serving_amount: 1,
+      serving_unit: "meal",
       calories: round(calories),
       protein_g: round(protein),
       carbs_g: round(carbs),
       fat_g: round(fat),
-      notes,
+      notes: explicitCalories
+        ? `Matched ${notes.join(", ")} and scaled macros to your provided calories.`
+        : `Estimated from ${notes.join(", ")}.`,
+      assistant_message: explicitCalories
+        ? `I matched ${notes.join(", ")} and scaled the macros to ${formatNumber(explicitCalories)} calories.`
+        : `I estimated this as ${notes.join(", ")}.`,
       source: "assistant_text"
     };
   }
 
   function parseNutritionLabelText(text, fallbackName, fallbackBrand) {
-    const normalized = String(text || "");
+    const normalized = normalizeOcrText(text);
     const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     const servingLabel = extractText(normalized, [/serving size[:\s]+([^\n]+)/i]) || "1 serving";
-    const calories = extractValue(normalized, [/\bcalories\b[:\s]+(\d+(?:\.\d+)?)/i, /\bcalories\s+(\d+(?:\.\d+)?)/i]);
-    const protein = extractValue(normalized, [/\bprotein\b[:\s]+(\d+(?:\.\d+)?)/i]);
-    const carbs = extractValue(normalized, [/\btotal carbohydrate[s]?\b[:\s]+(\d+(?:\.\d+)?)/i, /\bcarb[s]?\b[:\s]+(\d+(?:\.\d+)?)/i]);
-    const fat = extractValue(normalized, [/\btotal fat\b[:\s]+(\d+(?:\.\d+)?)/i, /\bfat\b[:\s]+(\d+(?:\.\d+)?)/i]);
+    let calories = extractCalories(lines, normalized);
+    const protein = extractMacroFromLines(lines, ["protein"]);
+    const carbs = extractMacroFromLines(lines, ["total carbohydrate", "total carbs", "carbohydrate", "carbs"]);
+    const fat = extractMacroFromLines(lines, ["total fat", "fat"]);
+    if (!calories && (protein || carbs || fat)) {
+      calories = protein * 4 + carbs * 4 + fat * 9;
+    }
     const titleCandidate = lines.find((line) => !/nutrition|serving|calories/i.test(line) && line.length < 60) || "Scanned Item";
     return {
       name: (fallbackName || titleCandidate).trim(),
@@ -756,8 +936,88 @@
       carbs_g: round(carbs),
       fat_g: round(fat),
       notes: `Parsed from nutrition label. Serving size: ${servingLabel}.`,
+      assistant_message: `I read the label as ${formatNumber(calories)} calories, ${formatNumber(protein)}g protein, ${formatNumber(carbs)}g carbs, and ${formatNumber(fat)}g fat.`,
       source: "label_scan"
     };
+  }
+
+  function matchFoodReferences(query) {
+    const aliases = FOOD_REFERENCES
+      .flatMap((reference) => reference.aliases.map((alias) => ({ alias, reference })))
+      .sort((a, b) => b.alias.length - a.alias.length);
+    const spans = [];
+    const matches = [];
+    aliases.forEach(({ alias, reference }) => {
+      const index = query.indexOf(alias);
+      if (index < 0) return;
+      const span = [index, index + alias.length];
+      if (spans.some((existing) => span[0] < existing[1] && existing[0] < span[1])) return;
+      const { amount, unit } = amountNearAlias(query, span);
+      spans.push(span);
+      matches.push({ reference, amount, unit, index });
+    });
+    return matches.sort((a, b) => a.index - b.index);
+  }
+
+  function amountNearAlias(query, span) {
+    const windowStart = Math.max(0, span[0] - 26);
+    const windowEnd = Math.min(query.length, span[1] + 22);
+    const windowText = query.slice(windowStart, windowEnd);
+    const matches = [...windowText.matchAll(new RegExp(AMOUNT_REGEX.source, "gi"))];
+    const candidate = matches.find((match) => {
+      const start = windowStart + match.index;
+      const end = start + match[0].length;
+      return Math.min(Math.abs(end - span[0]), Math.abs(start - span[1])) <= 16;
+    });
+    if (!candidate) return { amount: 1, unit: "serving" };
+    return {
+      amount: Number(candidate[1]),
+      unit: UNIT_ALIASES[candidate[2].toLowerCase()] || "serving"
+    };
+  }
+
+  function normalizeOcrText(text) {
+    return String(text || "")
+      .replace(/\r/g, "\n")
+      .replace(/\|/g, " ")
+      .replace(/\bO(?=\d)/g, "0")
+      .replace(/(\d)O\b/g, "$10")
+      .replace(/\s+%/g, "%")
+      .replace(/[ \t]+/g, " ")
+      .trim();
+  }
+
+  function extractCalories(lines, normalized) {
+    const direct = extractValue(normalized, [/\bcalories\b[:\s]+(\d+(?:\.\d+)?)/i, /\bcalories\s+(\d+(?:\.\d+)?)/i]);
+    if (direct) return direct;
+    const index = lines.findIndex((line) => /calories/i.test(line) && !/from fat/i.test(line));
+    if (index < 0) return 0;
+    return firstNumber(lines[index]) || firstNumber(lines[index + 1] || "") || 0;
+  }
+
+  function extractMacroFromLines(lines, aliases) {
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!aliases.some((alias) => line.toLowerCase().includes(alias))) continue;
+      const value = gramsFromLine(line, aliases);
+      if (value !== null) return value;
+      for (let offset = 1; offset <= 2; offset += 1) {
+        const nextValue = gramsFromLine(lines[index + offset] || "", aliases);
+        if (nextValue !== null) return nextValue;
+      }
+    }
+    return 0;
+  }
+
+  function gramsFromLine(line, aliases) {
+    const cleaned = String(line || "").replace(/\d+\s*%/g, "");
+    const aliasPattern = aliases.map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const inline = cleaned.match(new RegExp(`(?:${aliasPattern})[^\\d]*(\\d+(?:\\.\\d+)?)\\s*g\\b`, "i"));
+    if (inline) return Number(inline[1]);
+    const grams = cleaned.match(/(\d+(?:\.\d+)?)\s*g\b/i);
+    if (grams) return Number(grams[1]);
+    if (aliases.some((alias) => cleaned.toLowerCase().includes(alias))) return firstNumber(cleaned);
+    return null;
   }
 
   function gramsFor(reference, amount, unit) {
@@ -788,6 +1048,11 @@
 
   function extractNumber(text, regex) {
     const match = text.match(regex);
+    return match ? Number(match[1]) : null;
+  }
+
+  function firstNumber(text) {
+    const match = String(text || "").match(/(\d+(?:\.\d+)?)/);
     return match ? Number(match[1]) : null;
   }
 
