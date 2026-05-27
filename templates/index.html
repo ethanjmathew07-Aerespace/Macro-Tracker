@@ -38,16 +38,33 @@
     <article class="card card--feature">
         <div class="card-head">
             <div>
-                <p class="card-kicker">Calories</p>
-                <h3>Daily target</h3>
+                <p class="card-kicker">Daily macros</p>
+                <h3>Top-line targets</h3>
             </div>
             <span class="chip chip--accent" id="dailyDeficitChip"></span>
         </div>
         <div class="ring-layout">
             <div class="goal-ring" id="goalRing">
                 <div class="goal-ring__inner">
-                    <strong id="ringCalories">0</strong>
-                    <span id="ringGoal">of 0</span>
+                    <span class="goal-ring__label">Daily totals</span>
+                    <div class="goal-ring__macro-grid">
+                        <div>
+                            <strong id="ringCalories">0</strong>
+                            <span>Calories</span>
+                        </div>
+                        <div>
+                            <strong id="ringProtein">0</strong>
+                            <span>Protein</span>
+                        </div>
+                        <div>
+                            <strong id="ringCarbs">0</strong>
+                            <span>Carbs</span>
+                        </div>
+                        <div>
+                            <strong id="ringFat">0</strong>
+                            <span>Fat</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="ring-stats">
@@ -176,7 +193,9 @@ let dashboardState = {{ dashboard|tojson }};
 
 const dateInput = document.getElementById('dashboardDate');
 const ringCalories = document.getElementById('ringCalories');
-const ringGoal = document.getElementById('ringGoal');
+const ringProtein = document.getElementById('ringProtein');
+const ringCarbs = document.getElementById('ringCarbs');
+const ringFat = document.getElementById('ringFat');
 const goalRing = document.getElementById('goalRing');
 const burnValue = document.getElementById('burnValue');
 const remainingValue = document.getElementById('remainingValue');
@@ -203,6 +222,27 @@ function formatSigned(value) {
     return `${number > 0 ? '+' : ''}${mt.number(number)}`;
 }
 
+function renderMacroRing(payload) {
+    const segments = [
+        ['var(--ring-calories)', Math.min(1, payload.calorie_progress || 0)],
+        ['var(--ring-protein)', Math.min(1, payload.macro_progress.protein || 0)],
+        ['var(--ring-carbs)', Math.min(1, payload.macro_progress.carbs || 0)],
+        ['var(--ring-fat)', Math.min(1, payload.macro_progress.fat || 0)],
+    ];
+    let start = 0;
+    const gradientParts = [];
+    for (const [color, progress] of segments) {
+        const end = start + 90;
+        const filled = start + (progress * 90);
+        gradientParts.push(`${color} ${start}deg ${filled}deg`);
+        if (filled < end) {
+            gradientParts.push(`rgba(255, 255, 255, 0.08) ${filled}deg ${end}deg`);
+        }
+        start = end;
+    }
+    goalRing.style.background = `radial-gradient(circle at center, #050505 53%, transparent 54%), conic-gradient(${gradientParts.join(', ')})`;
+}
+
 function renderDashboard(payload) {
     dashboardState = payload;
     const { day, settings, weekly, weekly_deficit_total, weekly_calories_total, weekly_burn_total, deficit_archive } = payload;
@@ -210,7 +250,9 @@ function renderDashboard(payload) {
     dateInput.value = payload.date;
     manualMealForm.elements.date.value = payload.date;
     ringCalories.textContent = mt.number(day.totals.calories);
-    ringGoal.textContent = `of ${mt.number(settings.daily_calorie_goal)}`;
+    ringProtein.textContent = mt.number(day.totals.protein_g);
+    ringCarbs.textContent = mt.number(day.totals.carbs_g);
+    ringFat.textContent = mt.number(day.totals.fat_g);
     burnValue.textContent = `${mt.number(day.calories_burned)} kcal`;
     remainingValue.textContent = `${mt.number(day.remaining_calories)} kcal`;
     insightConsumed.textContent = `${mt.number(day.totals.calories)} kcal`;
@@ -223,11 +265,11 @@ function renderDashboard(payload) {
     weeklyNutrition.textContent = `${mt.number(weekly_calories_total)} kcal`;
     weeklyBurn.textContent = `${mt.number(weekly_burn_total)} kcal`;
     weeklyDifference.textContent = `${formatSigned(weekly_deficit_total)} kcal`;
-    goalRing.style.setProperty('--progress', payload.calorie_progress);
     dailyDeficitChip.classList.toggle('chip--success', Number(day.deficit) >= 0);
     dailyDeficitChip.classList.toggle('chip--warning', Number(day.deficit) < 0);
     weeklyDeficitChip.classList.toggle('chip--success', Number(weekly_deficit_total) >= 0);
     weeklyDeficitChip.classList.toggle('chip--warning', Number(weekly_deficit_total) < 0);
+    renderMacroRing(payload);
 
     const macroCards = [
         ['Protein', day.totals.protein_g, settings.daily_protein_goal, payload.macro_progress.protein, 'protein'],

@@ -19,8 +19,13 @@
         <div class="card-head">
             <div>
                 <p class="card-kicker">Text assistant</p>
-                <h3>Estimate from description</h3>
+                <h3>Describe the meal like chat</h3>
             </div>
+        </div>
+        <div class="chat-thread" id="assistantConversation">
+            <article class="chat-bubble chat-bubble--assistant">
+                <p>Describe the meal however you normally would. I’ll estimate calories, protein, carbs, and fat, then preload the editor so you can save or log it.</p>
+            </article>
         </div>
         <form id="assistantTextForm" class="form-grid">
             <label>
@@ -29,7 +34,7 @@
             </label>
             <label>
                 Food description
-                <textarea name="query" rows="4" placeholder="200g chicken breast and 1 cup rice, 620 calories if known"></textarea>
+                <textarea name="query" rows="4" placeholder="I had a burrito bowl with double chicken, white rice, black beans, cheese, and a little sour cream"></textarea>
             </label>
             <label>
                 Known calories (optional)
@@ -83,6 +88,7 @@
         </div>
         <span class="chip" id="estimateSourceChip">No estimate yet</span>
     </div>
+    <p class="assistant-summary" id="assistantSummary">Your estimate summary will show up here after you chat or scan a label.</p>
     <form id="estimateEditor" class="form-grid form-grid--compact">
         <label>
             Date
@@ -144,6 +150,8 @@ const assistantTextForm = document.getElementById('assistantTextForm');
 const labelScanForm = document.getElementById('labelScanForm');
 const estimateEditor = document.getElementById('estimateEditor');
 const estimateSourceChip = document.getElementById('estimateSourceChip');
+const assistantConversation = document.getElementById('assistantConversation');
+const assistantSummary = document.getElementById('assistantSummary');
 const addEstimateMealButton = document.getElementById('addEstimateMealButton');
 const saveEstimateMealButton = document.getElementById('saveEstimateMealButton');
 const archiveEstimateButton = document.getElementById('archiveEstimateButton');
@@ -163,8 +171,16 @@ function syncSelectedFilename() {
     selectedLabelFile.textContent = file ? `${file.name}` : 'No image selected yet.';
 }
 
-function populateEstimate(estimate, sourceLabel) {
-    estimateEditor.elements.date.value = assistantTextForm.elements.date.value;
+function appendChatMessage(role, text) {
+    const bubble = document.createElement('article');
+    bubble.className = `chat-bubble chat-bubble--${role}`;
+    bubble.innerHTML = `<p>${mt.escapeHtml(text || '')}</p>`;
+    assistantConversation.appendChild(bubble);
+    assistantConversation.scrollTop = assistantConversation.scrollHeight;
+}
+
+function populateEstimate(estimate, sourceLabel, activeDate) {
+    estimateEditor.elements.date.value = activeDate;
     estimateEditor.elements.name.value = estimate.name || '';
     estimateEditor.elements.brand.value = estimate.brand || '';
     estimateEditor.elements.source.value = estimate.source || 'assistant_text';
@@ -177,19 +193,23 @@ function populateEstimate(estimate, sourceLabel) {
     estimateEditor.elements.notes.value = estimate.notes || '';
     estimateSourceChip.textContent = sourceLabel;
     ocrTextPreview.textContent = estimate.ocr_text || 'No OCR text yet.';
+    assistantSummary.textContent = estimate.assistant_message || estimate.notes || 'Estimate ready to review.';
 }
 
 assistantTextForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const payload = Object.fromEntries(new FormData(assistantTextForm).entries());
+    appendChatMessage('user', payload.query || 'Estimate this meal');
     try {
         const result = await mt.json('/api/assistant/estimate', {
             method: 'POST',
             body: JSON.stringify(payload),
         });
-        populateEstimate(result.estimate, 'Text estimate');
+        appendChatMessage('assistant', result.estimate.assistant_message || 'Estimate ready.');
+        populateEstimate(result.estimate, 'Text estimate', assistantTextForm.elements.date.value);
         mt.showToast('Food estimate ready.');
     } catch (error) {
+        appendChatMessage('assistant', error.message);
         mt.showToast(error.message, 'error');
     }
 });
@@ -201,6 +221,10 @@ labelScanForm.addEventListener('submit', async (event) => {
         mt.showToast('Choose a nutrition label photo first.', 'error');
         return;
     }
+    appendChatMessage(
+        'user',
+        `Scan this label${labelScanForm.elements.name.value ? ` for ${labelScanForm.elements.name.value}` : ''}.`
+    );
 
     const formData = new FormData();
     formData.append('date', labelScanForm.elements.date.value);
@@ -216,10 +240,11 @@ labelScanForm.addEventListener('submit', async (event) => {
         if (!response.ok) {
             throw new Error(payload.error || 'Label scan failed.');
         }
-        populateEstimate(payload.estimate, 'Nutrition label scan');
-        estimateEditor.elements.date.value = labelScanForm.elements.date.value;
+        appendChatMessage('assistant', payload.estimate.assistant_message || 'Nutrition label scanned.');
+        populateEstimate(payload.estimate, 'Nutrition label scan', labelScanForm.elements.date.value);
         mt.showToast('Nutrition label scanned.');
     } catch (error) {
+        appendChatMessage('assistant', error.message);
         mt.showToast(error.message, 'error');
     }
 });

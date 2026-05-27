@@ -14,6 +14,19 @@
     </label>
 </section>
 
+<section class="card">
+    <div class="card-head">
+        <div>
+            <p class="card-kicker">Search</p>
+            <h3>Find meals and archived foods faster</h3>
+        </div>
+    </div>
+    <div class="search-row">
+        <input type="search" id="librarySearch" placeholder="Search by meal name, brand, source, or macros">
+    </div>
+    <p class="search-status" id="librarySearchStatus">Showing everything in your library.</p>
+</section>
+
 <section class="dashboard-grid dashboard-grid--wide">
     <article class="card">
         <div class="card-head">
@@ -23,21 +36,71 @@
             </div>
             <span class="chip">{{ library_items|length }} items</span>
         </div>
-        <div class="entry-list">
+        <div class="entry-list" id="libraryItemsList">
             {% if library_items %}
                 {% for item in library_items %}
-                    <article class="entry-card">
+                    <article
+                        class="entry-card"
+                        data-search-card="library"
+                        data-search-text="{{ ((item.brand ~ ' ' if item.brand else '') ~ item.name ~ ' ' ~ item.source ~ ' ' ~ item.notes)|lower }}"
+                    >
                         <div>
                             <div class="entry-card__top">
                                 <h3>{{ item.brand ~ ' - ' if item.brand else '' }}{{ item.name }}</h3>
                                 <span class="chip">{{ item.source }}</span>
                             </div>
-                            <p>{{ item.calories }} kcal · {{ item.protein_g }} P · {{ item.carbs_g }} C · {{ item.fat_g }} F</p>
-                            <p>{{ item.serving_amount }} {{ item.serving_unit }}</p>
+                            <p data-library-summary>{{ item.calories }} kcal · {{ item.protein_g }} P · {{ item.carbs_g }} C · {{ item.fat_g }} F</p>
+                            <p data-library-serving-label>{{ item.serving_amount }} {{ item.serving_unit }}</p>
                             <div class="button-row">
                                 <input type="number" min="0.1" step="0.1" value="1" data-library-serving="{{ item.id }}">
                                 <button type="button" class="primary-button" data-log-library="{{ item.id }}">Log item</button>
+                                <button type="button" class="ghost-button" data-toggle-edit="library-{{ item.id }}">Edit</button>
                                 <button type="button" class="ghost-button" data-delete-library="{{ item.id }}">Delete</button>
+                            </div>
+                            <div class="entry-edit-panel" id="library-{{ item.id }}" hidden>
+                                <form class="form-grid form-grid--compact" data-edit-library-form="{{ item.id }}">
+                                    <input type="hidden" name="source" value="{{ item.source }}">
+                                    <label>
+                                        Name
+                                        <input type="text" name="name" value="{{ item.name }}" required>
+                                    </label>
+                                    <label>
+                                        Brand
+                                        <input type="text" name="brand" value="{{ item.brand }}">
+                                    </label>
+                                    <label>
+                                        Serving amount
+                                        <input type="number" name="serving_amount" min="0.1" step="0.1" value="{{ item.serving_amount }}">
+                                    </label>
+                                    <label>
+                                        Serving unit
+                                        <input type="text" name="serving_unit" value="{{ item.serving_unit }}">
+                                    </label>
+                                    <label>
+                                        Calories
+                                        <input type="number" name="calories" min="0" step="0.1" value="{{ item.calories }}">
+                                    </label>
+                                    <label>
+                                        Protein
+                                        <input type="number" name="protein_g" min="0" step="0.1" value="{{ item.protein_g }}">
+                                    </label>
+                                    <label>
+                                        Carbs
+                                        <input type="number" name="carbs_g" min="0" step="0.1" value="{{ item.carbs_g }}">
+                                    </label>
+                                    <label>
+                                        Fat
+                                        <input type="number" name="fat_g" min="0" step="0.1" value="{{ item.fat_g }}">
+                                    </label>
+                                    <label class="form-grid__full">
+                                        Notes
+                                        <textarea name="notes" rows="3">{{ item.notes }}</textarea>
+                                    </label>
+                                    <div class="button-row form-grid__full">
+                                        <button type="submit" class="primary-button">Save changes</button>
+                                        <button type="button" class="ghost-button" data-toggle-edit="library-{{ item.id }}">Close</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </article>
@@ -59,20 +122,53 @@
             </div>
             <span class="chip">{{ saved_meals|length }} meals</span>
         </div>
-        <div class="entry-list">
+        <div class="entry-list" id="savedMealsList">
             {% if saved_meals %}
                 {% for meal in saved_meals %}
-                    <article class="entry-card">
+                    <article
+                        class="entry-card"
+                        data-search-card="saved"
+                        data-search-text="{{ (meal.name ~ ' meal ' ~ meal.calories ~ ' ' ~ meal.protein_g ~ ' ' ~ meal.carbs_g ~ ' ' ~ meal.fat_g)|lower }}"
+                    >
                         <div>
                             <div class="entry-card__top">
-                                <h3>{{ meal.name }}</h3>
+                                <h3 data-saved-name>{{ meal.name }}</h3>
                                 <span class="chip">meal</span>
                             </div>
-                            <p>{{ meal.calories }} kcal · {{ meal.protein_g }} P · {{ meal.carbs_g }} C · {{ meal.fat_g }} F</p>
+                            <p data-saved-summary>{{ meal.calories }} kcal · {{ meal.protein_g }} P · {{ meal.carbs_g }} C · {{ meal.fat_g }} F</p>
                             <div class="button-row">
                                 <input type="number" min="0.1" step="0.1" value="1" data-saved-serving="{{ meal.id }}">
                                 <button type="button" class="primary-button" data-log-saved="{{ meal.id }}">Log meal</button>
+                                <button type="button" class="ghost-button" data-toggle-edit="saved-{{ meal.id }}">Edit</button>
                                 <button type="button" class="ghost-button" data-delete-saved="{{ meal.id }}">Delete</button>
+                            </div>
+                            <div class="entry-edit-panel" id="saved-{{ meal.id }}" hidden>
+                                <form class="form-grid form-grid--compact" data-edit-saved-form="{{ meal.id }}">
+                                    <label class="form-grid__full">
+                                        Name
+                                        <input type="text" name="name" value="{{ meal.name }}" required>
+                                    </label>
+                                    <label>
+                                        Calories
+                                        <input type="number" name="calories" min="0" step="0.1" value="{{ meal.calories }}">
+                                    </label>
+                                    <label>
+                                        Protein
+                                        <input type="number" name="protein_g" min="0" step="0.1" value="{{ meal.protein_g }}">
+                                    </label>
+                                    <label>
+                                        Carbs
+                                        <input type="number" name="carbs_g" min="0" step="0.1" value="{{ meal.carbs_g }}">
+                                    </label>
+                                    <label>
+                                        Fat
+                                        <input type="number" name="fat_g" min="0" step="0.1" value="{{ meal.fat_g }}">
+                                    </label>
+                                    <div class="button-row form-grid__full">
+                                        <button type="submit" class="primary-button">Save changes</button>
+                                        <button type="button" class="ghost-button" data-toggle-edit="saved-{{ meal.id }}">Close</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </article>
@@ -91,8 +187,68 @@
 {% block scripts %}
 <script>
 const libraryDate = document.getElementById('libraryDate');
+const librarySearch = document.getElementById('librarySearch');
+const librarySearchStatus = document.getElementById('librarySearchStatus');
+
+function toggleEditPanel(id) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+}
+
+function updateSearchResults() {
+    const query = (librarySearch.value || '').trim().toLowerCase();
+    const cards = [...document.querySelectorAll('[data-search-card]')];
+    let visibleCount = 0;
+    cards.forEach((card) => {
+        const matches = !query || (card.dataset.searchText || '').includes(query);
+        card.hidden = !matches;
+        if (matches) {
+            visibleCount += 1;
+        }
+    });
+    librarySearchStatus.textContent = query
+        ? `${visibleCount} result${visibleCount === 1 ? '' : 's'} for "${librarySearch.value.trim()}".`
+        : 'Showing everything in your library.';
+}
+
+function updateLibraryCard(card, item) {
+    const title = card.querySelector('h3');
+    const summary = card.querySelector('[data-library-summary]');
+    const servingLabel = card.querySelector('[data-library-serving-label]');
+    if (title) {
+        title.textContent = `${item.brand ? `${item.brand} - ` : ''}${item.name}`;
+    }
+    if (summary) {
+        summary.textContent = `${mt.number(item.calories)} kcal · ${mt.number(item.protein_g)} P · ${mt.number(item.carbs_g)} C · ${mt.number(item.fat_g)} F`;
+    }
+    if (servingLabel) {
+        servingLabel.textContent = `${mt.number(item.serving_amount)} ${item.serving_unit}`;
+    }
+    card.dataset.searchText = `${item.brand || ''} ${item.name} ${item.source || ''} ${item.notes || ''}`.toLowerCase();
+}
+
+function updateSavedCard(card, meal) {
+    const name = card.querySelector('[data-saved-name]');
+    const summary = card.querySelector('[data-saved-summary]');
+    if (name) {
+        name.textContent = meal.name;
+    }
+    if (summary) {
+        summary.textContent = `${mt.number(meal.calories)} kcal · ${mt.number(meal.protein_g)} P · ${mt.number(meal.carbs_g)} C · ${mt.number(meal.fat_g)} F`;
+    }
+    card.dataset.searchText = `${meal.name} meal ${meal.calories} ${meal.protein_g} ${meal.carbs_g} ${meal.fat_g}`.toLowerCase();
+}
+
+librarySearch.addEventListener('input', updateSearchResults);
 
 document.querySelector('.screen-body').addEventListener('click', async (event) => {
+    const toggleButton = event.target.closest('[data-toggle-edit]');
+    if (toggleButton) {
+        toggleEditPanel(toggleButton.dataset.toggleEdit);
+        return;
+    }
+
     const deleteLibraryButton = event.target.closest('[data-delete-library]');
     if (deleteLibraryButton) {
         try {
@@ -100,6 +256,7 @@ document.querySelector('.screen-body').addEventListener('click', async (event) =
                 method: 'DELETE',
             });
             deleteLibraryButton.closest('.entry-card')?.remove();
+            updateSearchResults();
             mt.showToast('Archived item removed.');
         } catch (error) {
             mt.showToast(error.message, 'error');
@@ -133,6 +290,7 @@ document.querySelector('.screen-body').addEventListener('click', async (event) =
                 method: 'DELETE',
             });
             deleteSavedButton.closest('.entry-card')?.remove();
+            updateSearchResults();
             mt.showToast('Saved meal removed.');
         } catch (error) {
             mt.showToast(error.message, 'error');
@@ -158,5 +316,54 @@ document.querySelector('.screen-body').addEventListener('click', async (event) =
         mt.showToast(error.message, 'error');
     }
 });
+
+document.querySelector('.screen-body').addEventListener('submit', async (event) => {
+    const libraryForm = event.target.closest('[data-edit-library-form]');
+    if (libraryForm) {
+        event.preventDefault();
+        const itemId = libraryForm.dataset.editLibraryForm;
+        const payload = Object.fromEntries(new FormData(libraryForm).entries());
+        try {
+            const result = await mt.json(`/api/library-items/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            });
+            const card = libraryForm.closest('.entry-card');
+            if (card) {
+                updateLibraryCard(card, result.library_item);
+            }
+            toggleEditPanel(`library-${itemId}`);
+            updateSearchResults();
+            mt.showToast('Archived item updated.');
+        } catch (error) {
+            mt.showToast(error.message, 'error');
+        }
+        return;
+    }
+
+    const savedForm = event.target.closest('[data-edit-saved-form]');
+    if (!savedForm) return;
+
+    event.preventDefault();
+    const mealId = savedForm.dataset.editSavedForm;
+    const payload = Object.fromEntries(new FormData(savedForm).entries());
+    try {
+        const result = await mt.json(`/api/saved-meals/${mealId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+        });
+        const card = savedForm.closest('.entry-card');
+        if (card) {
+            updateSavedCard(card, result.saved_meal);
+        }
+        toggleEditPanel(`saved-${mealId}`);
+        updateSearchResults();
+        mt.showToast('Saved meal updated.');
+    } catch (error) {
+        mt.showToast(error.message, 'error');
+    }
+});
+
+updateSearchResults();
 </script>
 {% endblock %}

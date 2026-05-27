@@ -531,6 +531,50 @@ class SQLiteRepository:
             return None
         return self._row_to_saved_meal(row)
 
+    def update_saved_meal(
+        self,
+        saved_meal_id: int,
+        *,
+        name: Any,
+        protein_g: Any,
+        carbs_g: Any,
+        fat_g: Any,
+        calories: Any,
+    ) -> dict[str, Any]:
+        normalized_name = str(name).strip()
+        if not normalized_name:
+            raise ValidationError("name is required.")
+
+        with self.transaction() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE saved_meals
+                SET name = ?,
+                    protein_g = ?,
+                    carbs_g = ?,
+                    fat_g = ?,
+                    calories = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    normalized_name,
+                    coerce_float(protein_g, field_name="protein_g"),
+                    coerce_float(carbs_g, field_name="carbs_g"),
+                    coerce_float(fat_g, field_name="fat_g"),
+                    coerce_float(calories, field_name="calories"),
+                    now_iso(),
+                    saved_meal_id,
+                ),
+            )
+            if cursor.rowcount <= 0:
+                raise ValidationError("Saved meal not found.")
+            row = conn.execute("SELECT * FROM saved_meals WHERE id = ?", (saved_meal_id,)).fetchone()
+
+        if row is None:
+            raise RuntimeError("Saved meal update failed.")
+        return self._row_to_saved_meal(row)
+
     def delete_saved_meal(self, saved_meal_id: int) -> bool:
         with self.transaction() as conn:
             cursor = conn.execute("DELETE FROM saved_meals WHERE id = ?", (saved_meal_id,))
@@ -670,6 +714,71 @@ class SQLiteRepository:
             row = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
         if row is None:
             return None
+        return self._row_to_library_item(row)
+
+    def update_library_item(
+        self,
+        item_id: int,
+        *,
+        name: Any,
+        brand: Any = "",
+        serving_amount: Any = 1.0,
+        serving_unit: Any = "serving",
+        calories: Any,
+        protein_g: Any,
+        carbs_g: Any,
+        fat_g: Any,
+        notes: Any = "",
+        source: Any | None = None,
+    ) -> dict[str, Any]:
+        normalized_name = str(name).strip()
+        if not normalized_name:
+            raise ValidationError("name is required.")
+
+        existing_item = self.get_library_item(item_id)
+        if existing_item is None:
+            raise ValidationError("Library item not found.")
+
+        normalized_source = str(source or existing_item["source"]).strip() or existing_item["source"]
+
+        with self.transaction() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE library_items
+                SET name = ?,
+                    brand = ?,
+                    serving_amount = ?,
+                    serving_unit = ?,
+                    calories = ?,
+                    protein_g = ?,
+                    carbs_g = ?,
+                    fat_g = ?,
+                    source = ?,
+                    notes = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    normalized_name,
+                    str(brand or "").strip(),
+                    coerce_float(serving_amount, field_name="serving_amount", minimum=0.01),
+                    str(serving_unit or "serving").strip() or "serving",
+                    coerce_float(calories, field_name="calories"),
+                    coerce_float(protein_g, field_name="protein_g"),
+                    coerce_float(carbs_g, field_name="carbs_g"),
+                    coerce_float(fat_g, field_name="fat_g"),
+                    normalized_source,
+                    str(notes or "").strip(),
+                    now_iso(),
+                    item_id,
+                ),
+            )
+            if cursor.rowcount <= 0:
+                raise ValidationError("Library item not found.")
+            row = conn.execute("SELECT * FROM library_items WHERE id = ?", (item_id,)).fetchone()
+
+        if row is None:
+            raise RuntimeError("Library item update failed.")
         return self._row_to_library_item(row)
 
     def delete_library_item(self, item_id: int) -> bool:

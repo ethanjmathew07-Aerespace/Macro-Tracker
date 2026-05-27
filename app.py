@@ -67,6 +67,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def handle_validation_error(error: ValidationError):
         return jsonify({"error": str(error)}), 400
 
+    @app.errorhandler(ValueError)
+    def handle_value_error(error: ValueError):
+        return jsonify({"error": str(error)}), 400
+
     @app.context_processor
     def inject_layout_values():
         return {"current_date": current_date()}
@@ -224,6 +228,25 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return jsonify({"error": "Saved meal not found."}), 404
         return jsonify({"status": "success", "saved_meals": get_repository().list_saved_meals()})
 
+    @app.put("/api/saved-meals/<int:saved_meal_id>")
+    def api_update_saved_meal(saved_meal_id: int):
+        payload = request.get_json(silent=True) or {}
+        saved_meal = get_repository().update_saved_meal(
+            saved_meal_id,
+            name=payload.get("name"),
+            protein_g=payload.get("protein_g", payload.get("protein", 0)),
+            carbs_g=payload.get("carbs_g", payload.get("carbs", 0)),
+            fat_g=payload.get("fat_g", payload.get("fat", 0)),
+            calories=payload.get("calories", 0),
+        )
+        return jsonify(
+            {
+                "status": "success",
+                "saved_meal": saved_meal,
+                "saved_meals": get_repository().list_saved_meals(),
+            }
+        )
+
     @app.post("/api/saved-meals/<int:saved_meal_id>/log")
     def api_log_saved_meal(saved_meal_id: int):
         payload = request.get_json(silent=True) or {}
@@ -270,6 +293,24 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if not deleted:
             return jsonify({"error": "Library item not found."}), 404
         return jsonify({"status": "success", "library_items": get_repository().list_library_items()})
+
+    @app.put("/api/library-items/<int:item_id>")
+    def api_update_library_item(item_id: int):
+        payload = request.get_json(silent=True) or {}
+        item = get_repository().update_library_item(
+            item_id,
+            name=payload.get("name"),
+            brand=payload.get("brand", ""),
+            serving_amount=payload.get("serving_amount", 1),
+            serving_unit=payload.get("serving_unit", "serving"),
+            calories=payload.get("calories", 0),
+            protein_g=payload.get("protein_g", 0),
+            carbs_g=payload.get("carbs_g", 0),
+            fat_g=payload.get("fat_g", 0),
+            source=payload.get("source"),
+            notes=payload.get("notes", ""),
+        )
+        return jsonify({"status": "success", "library_item": item, "library_items": get_repository().list_library_items()})
 
     @app.post("/api/library-items/<int:item_id>/log")
     def api_log_library_item(item_id: int):
